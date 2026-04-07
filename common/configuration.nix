@@ -12,6 +12,26 @@
   networking.networkmanager.enable = true;
   networking.firewall.enable = true;
 
+  ## ----- bluetooth -----------------------------------------------------------
+  hardware.bluetooth = {
+    enable = true;
+    powerOnBoot = false;
+  };
+
+  ## ----- power management ----------------------------------------------------
+  services.power-profiles-daemon.enable = true;
+  services.upower.enable = true;
+
+  ## ----- audio ---------------------------------------------------------------
+  services.pulseaudio.enable = false;
+  security.rtkit.enable = true;
+  services.pipewire = {
+    enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
+  };
+
   ## ----- packages ------------------------------------------------------------
   environment.systemPackages = with pkgs; [
     vim

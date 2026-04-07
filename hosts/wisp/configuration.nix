@@ -4,6 +4,7 @@
   imports = [
     ./hardware-configuration.nix
     ./yubikey-luks.nix # for Yubikey-based FDE
+    ../../common/desktop.nix
   ];
 
   ## ----- boot ----------------------------------------------------------------
@@ -11,13 +12,16 @@
   boot.loader.efi.canTouchEfiVariables = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  ## ----- hardware ------------------------------------------------------------
+  hardware.graphics.enable = true;
+
   ## ----- network -------------------------------------------------------------
   networking.hostName = "wisp";
 
   ## ----- users ---------------------------------------------------------------
   users.users.nullcopy = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" ];
+    extraGroups = [ "wheel" "networkmanager" "audio" ];
   };
 
   ## ----- state version -------------------------------------------------------
