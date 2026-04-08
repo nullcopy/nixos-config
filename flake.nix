@@ -31,7 +31,7 @@
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
             home-manager.extraSpecialArgs = { inherit inputs; };
-            home-manager.users.nullcopy = import ./users/nullcopy.nix;
+            home-manager.users.nullcopy = import ./users/nullcopy/configuration.nix;
           }
         ];
       };

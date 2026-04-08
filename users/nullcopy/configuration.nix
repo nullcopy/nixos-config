@@ -32,10 +32,17 @@
   programs.noctalia-shell = {
     enable = true;
     systemd.enable = true;
-    settings = {
-      launcher.terminalCommand = "alacritty -e";
-    };
+    # Config files exported from the live desktop. Edit the JSON in-repo, or
+    # re-export from ~/.config/noctalia/ after tweaking in the noctalia UI.
+    settings = ./noctalia/settings.json;
+    colors = ./noctalia/colors.json;
+    plugins = ./noctalia/plugins.json;
   };
+
+  # The noctalia home-manager module manages settings/colors/plugins JSON but
+  # does NOT install plugin binaries. Symlink the catwalk plugin sources so the
+  # bar widget `plugin:catwalk` resolves without needing an in-app download.
+  xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
 
   programs.alacritty.enable = true;
 
