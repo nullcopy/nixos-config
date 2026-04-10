@@ -3,6 +3,7 @@
 {
   imports = [
     inputs.noctalia.homeModules.default
+    ./git-aliases.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
