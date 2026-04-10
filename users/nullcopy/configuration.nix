@@ -44,6 +44,9 @@
   # bar widget `plugin:catwalk` resolves without needing an in-app download.
   xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
 
+  programs.zsh.enable = true;
+  programs.starship.enable = true;
+
   programs.alacritty.enable = true;
 
   programs.git = {
