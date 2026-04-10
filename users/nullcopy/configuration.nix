@@ -3,6 +3,8 @@
 {
   imports = [
     inputs.noctalia.homeModules.default
+    inputs.nixvim.homeModules.nixvim
+    ./neovim.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
