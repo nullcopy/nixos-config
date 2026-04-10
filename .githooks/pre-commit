@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Format staged .nix files with nixfmt before committing.
+
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.nix')
+[ -z "$staged" ] && exit 0
+
+if ! command -v nixfmt &>/dev/null; then
+  echo "nixfmt not found — install via 'nix fmt' or 'nix shell nixpkgs#nixfmt-rfc-style'"
+  exit 1
+fi
+
+# Format and re-stage
+echo "$staged" | xargs nixfmt
+echo "$staged" | xargs git add
+
+exit 0

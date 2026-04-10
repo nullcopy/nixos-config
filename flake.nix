@@ -15,26 +15,39 @@
     };
   };
 
-  outputs = inputs@{ self, nixpkgs, home-manager, noctalia, ... }: {
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      home-manager,
+      noctalia,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+    in
+    {
+      formatter.${system} = pkgs.nixfmt-rfc-style;
 
-    nixosConfigurations = {
+      nixosConfigurations = {
 
-      ## ----- wisp laptop config ----------------------------------------------
-      wisp = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = { inherit inputs; };
-        modules = [
-          ./common/configuration.nix
-          ./hosts/wisp/configuration.nix
-          home-manager.nixosModules.home-manager
-          {
-            home-manager.useGlobalPkgs = true;
-            home-manager.useUserPackages = true;
-            home-manager.extraSpecialArgs = { inherit inputs; };
-            home-manager.users.nullcopy = import ./users/nullcopy/configuration.nix;
-          }
-        ];
+        ## ----- wisp laptop config ----------------------------------------------
+        wisp = nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./common/configuration.nix
+            ./hosts/wisp/configuration.nix
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = { inherit inputs; };
+              home-manager.users.nullcopy = import ./users/nullcopy/configuration.nix;
+            }
+          ];
+        };
       };
     };
-  };
 }
