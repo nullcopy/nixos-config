@@ -4,6 +4,7 @@
   imports = [
     inputs.noctalia.homeModules.default
     ./git-aliases.nix
+    ./tmux-helpers.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
