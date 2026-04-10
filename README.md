@@ -46,6 +46,20 @@ Machine configs are organized by host name, so pick a <name> (e.g. wisp) and fol
    ```
 1. Reboot, log in as root, set user password with `passwd`.
 
+### Enable the pre-commit hook
+
+The repo ships a pre-commit hook that auto-formats `.nix` files with `nixfmt`. After cloning, point git at it:
+
+```
+git config core.hooksPath .githooks
+```
+
+You can also format the entire repo manually:
+
+```
+nix fmt
+```
+
 ## Day to day
 
 From anywhere inside the flake checkout:
