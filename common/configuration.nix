@@ -12,6 +12,10 @@
   networking.networkmanager.enable = true;
   networking.firewall.enable = true;
 
+  ## ----- tailscale -----------------------------------------------------------
+  # Daemon must run as root; per-user up/down is configured in home-manager.
+  services.tailscale.enable = true;
+
   ## ----- bluetooth -----------------------------------------------------------
   hardware.bluetooth = {
     enable = true;
