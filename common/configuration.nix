@@ -1,8 +1,16 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   ## ----- nix -----------------------------------------------------------------
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   ## ----- locale --------------------------------------------------------------
   time.timeZone = "America/Chicago";
@@ -40,5 +48,6 @@
     wget
     bottom
     magic-wormhole
+    nixfmt
   ];
 }
