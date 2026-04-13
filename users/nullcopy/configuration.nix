@@ -1,9 +1,15 @@
-{ config, pkgs, inputs, ... }:
+{
+  config,
+  pkgs,
+  inputs,
+  ...
+}:
 
 {
   imports = [
     inputs.noctalia.homeModules.default
     ./tailscale.nix
+    ./git-aliases.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
@@ -44,6 +50,9 @@
   # does NOT install plugin binaries. Symlink the catwalk plugin sources so the
   # bar widget `plugin:catwalk` resolves without needing an in-app download.
   xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
+
+  programs.zsh.enable = true;
+  programs.starship.enable = true;
 
   programs.alacritty.enable = true;
 

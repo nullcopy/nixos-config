@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   imports = [
@@ -19,9 +24,16 @@
   networking.hostName = "wisp";
 
   ## ----- users ---------------------------------------------------------------
+  programs.zsh.enable = true; # system-level so zsh is in /etc/shells
+
   users.users.nullcopy = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "audio" ];
+    shell = pkgs.zsh;
+    extraGroups = [
+      "wheel"
+      "networkmanager"
+      "audio"
+    ];
   };
 
   ## ----- state version -------------------------------------------------------
