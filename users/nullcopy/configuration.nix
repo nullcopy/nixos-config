@@ -3,6 +3,7 @@
 {
   imports = [
     inputs.noctalia.homeModules.default
+    ./tailscale.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
