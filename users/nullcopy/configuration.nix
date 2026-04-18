@@ -53,7 +53,10 @@
   xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
 
   programs.zsh.enable = true;
-  programs.starship.enable = true;
+  programs.starship = {
+    enable = true;
+    presets = [ "gruvbox-rainbow" ];
+  };
 
   programs.alacritty = {
     enable = true;
