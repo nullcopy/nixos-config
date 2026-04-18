@@ -52,7 +52,16 @@
   # bar widget `plugin:catwalk` resolves without needing an in-app download.
   xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
 
-  programs.zsh.enable = true;
+  programs.zsh = {
+    enable = true;
+    autosuggestion.enable = true;
+    historySubstringSearch = {
+      enable = true;
+      searchUpKey = [ "^[[A" ]; # Up arrow
+      searchDownKey = [ "^[[B" ]; # Down arrow
+    };
+  };
+
   programs.starship = {
     enable = true;
     presets = [ "gruvbox-rainbow" ];
