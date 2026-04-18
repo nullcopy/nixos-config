@@ -53,5 +53,6 @@
     bottom
     magic-wormhole
     nixfmt
+    tree
   ];
 }
