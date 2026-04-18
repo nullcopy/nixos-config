@@ -15,6 +15,7 @@
   ## ----- packages ------------------------------------------------------------
   home.packages = with pkgs; [
     brave
+    nerd-fonts.jetbrains-mono
   ];
 
   ## ----- session variables ---------------------------------------------------
@@ -54,7 +55,10 @@
   programs.zsh.enable = true;
   programs.starship.enable = true;
 
-  programs.alacritty.enable = true;
+  programs.alacritty = {
+    enable = true;
+    settings.font.normal.family = "JetBrainsMono Nerd Font";
+  };
 
   programs.git = {
     enable = true;
