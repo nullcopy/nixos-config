@@ -10,7 +10,7 @@
     inputs.noctalia.homeModules.default
     inputs.nixvim.homeModules.nixvim
     ./tailscale.nix
-    ./git-aliases.nix
+    ./aliases.nix
     ./neovim.nix
   ];
 
