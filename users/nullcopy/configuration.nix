@@ -42,17 +42,9 @@
   programs.noctalia-shell = {
     enable = true;
     systemd.enable = true;
-    # Config files exported from the live desktop. Edit the JSON in-repo, or
-    # re-export from ~/.config/noctalia/ after tweaking in the noctalia UI.
-    settings = ./noctalia/settings.json;
-    colors = ./noctalia/colors.json;
-    plugins = ./noctalia/plugins.json;
+    # settings/colors/plugins are managed via mkOutOfStoreSymlink below so UI
+    # changes persist back into the flake repo as unstaged edits.
   };
-
-  # The noctalia home-manager module manages settings/colors/plugins JSON but
-  # does NOT install plugin binaries. Symlink the catwalk plugin sources so the
-  # bar widget `plugin:catwalk` resolves without needing an in-app download.
-  xdg.configFile."noctalia/plugins/catwalk".source = ./noctalia/plugins/catwalk;
 
   programs.zsh = {
     enable = true;
@@ -84,6 +76,13 @@
       core.editor = "vim";
     };
   };
+
+  ## ----- xdg config files ---------------------------------------------------
+  # Symlink the entire ~/.config/noctalia directory (not individual files inside
+  # it) because noctalia uses atomic write-and-rename when saving, which would
+  # otherwise replace per-file symlinks with regular files on every save.
+  xdg.configFile."noctalia".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia";
 
   ## ----- state version -------------------------------------------------------
   # Don't change this unless you know what you're doing
