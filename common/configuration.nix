@@ -12,6 +12,13 @@
     "flakes"
   ];
 
+  # Garbage collection for nix generations
+  nix.gc = {
+    automatic = true;
+    dates = "daily"; # How frequently to run gc
+    options = "--delete-older-than 14d";
+  };
+
   ## ----- locale --------------------------------------------------------------
   time.timeZone = "America/Chicago";
   i18n.defaultLocale = "en_US.UTF-8";
