@@ -76,6 +76,8 @@
         email = "john@coldnoise.net";
       };
       core.editor = "vim";
+      commit.gpgsign = true;
+      tag.gpgsign = true;
     };
   };
 
