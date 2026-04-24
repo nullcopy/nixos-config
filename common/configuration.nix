@@ -51,6 +51,13 @@
     pulse.enable = true;
   };
 
+  ## ----- gpg -----------------------------------------------------------------
+  programs.gnupg.agent = {
+    enable = true;
+    pinentryPackage = pkgs.pinentry-curses;
+  };
+  services.pcscd.enable = true;
+
   ## ----- packages ------------------------------------------------------------
   environment.systemPackages = with pkgs; [
     vim

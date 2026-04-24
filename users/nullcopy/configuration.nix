@@ -66,6 +66,8 @@
     settings.font.normal.family = "JetBrainsMono Nerd Font";
   };
 
+  programs.gpg.enable = true;
+
   programs.git = {
     enable = true;
     settings = {
