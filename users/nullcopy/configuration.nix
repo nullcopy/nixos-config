@@ -18,6 +18,7 @@
   home.packages = with pkgs; [
     brave
     nerd-fonts.jetbrains-mono
+    fzf
   ];
 
   ## ----- session variables ---------------------------------------------------

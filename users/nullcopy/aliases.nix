@@ -13,6 +13,12 @@ in
 {
   programs.zsh.initContent = ''
     ## --- git helper functions ----------------------------------------
+    # Browse and cd to git worktree directory
+    cdwt () {
+      local selected
+      selected=$(git worktree list | fzf)
+      [ -n "$selected" ] && cd "$(echo "$selected" | awk '{print $1}')"
+    }
 
     # Returns the name of the main branch (main or master).
     function git_main_branch() {
