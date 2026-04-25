@@ -83,6 +83,7 @@ in
       swapfile = false;
       undofile = true;
       clipboard = "unnamedplus";
+      exrc = true; # load project-local .nvim.lua (prompts :trust on first use)
 
       # -- Display
       wrap = false;
@@ -254,10 +255,17 @@ in
       conform-nvim = {
         enable = true;
         settings = {
-          format_on_save = {
-            lsp_format = "fallback"; # use LSP formatter when no formatter matches
-            timeout_ms = 1000;
-          };
+          # Skip when vim.g.disable_autoformat (session) or
+          # vim.b.disable_autoformat (buffer) is set. Toggle with the
+          # :FormatDisable[!] / :FormatEnable user commands defined below.
+          format_on_save.__raw = ''
+            function(bufnr)
+              if vim.g.disable_autoformat or vim.b[bufnr].disable_autoformat then
+                return
+              end
+              return { lsp_format = "fallback", timeout_ms = 1000 }
+            end
+          '';
           formatters_by_ft = {
             c = [ "clang_format" ];
             cpp = [ "clang_format" ];
@@ -817,6 +825,22 @@ in
           end
         end,
       })
+
+      -- Toggle conform's format-on-save. Bang variant scopes to the buffer;
+      -- a project-wide opt-out can live in a `.nvim.lua` (exrc) file:
+      --   vim.g.disable_autoformat = true
+      vim.api.nvim_create_user_command('FormatDisable', function(args)
+        if args.bang then
+          vim.b.disable_autoformat = true
+        else
+          vim.g.disable_autoformat = true
+        end
+      end, { desc = 'Disable autoformat-on-save', bang = true })
+
+      vim.api.nvim_create_user_command('FormatEnable', function()
+        vim.b.disable_autoformat = false
+        vim.g.disable_autoformat = false
+      end, { desc = 'Re-enable autoformat-on-save' })
     '';
 
     # =========================================================================
