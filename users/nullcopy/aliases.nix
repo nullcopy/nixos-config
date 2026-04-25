@@ -56,28 +56,28 @@ in
   '';
 
   programs.zsh.shellAliases = {
-    ## --- core ------------------------------------------------------------------
+    ## --- misc -------------------------------------------------------------------
+    ll = "ls -l";
+    la = "ls -al";
+
+    ## --- git -------------------------------------------------------------------
     g = "git";
 
-    ## --- add --------------------------------------------------------------------
     ga = "git add";
     gaa = "git add --all";
     gapa = "git add --patch";
     gau = "git add --update";
     gav = "git add --verbose";
 
-    ## --- am ---------------------------------------------------------------------
     gam = "git am";
     gama = "git am --abort";
     gamc = "git am --continue";
     gamscp = "git am --show-current-patch";
     gams = "git am --skip";
 
-    ## --- apply ------------------------------------------------------------------
     gap = "git apply";
     gapt = "git apply --3way";
 
-    ## --- bisect -----------------------------------------------------------------
     gbs = "git bisect";
     gbsb = "git bisect bad";
     gbsg = "git bisect good";
@@ -86,10 +86,8 @@ in
     gbsr = "git bisect reset";
     gbss = "git bisect start";
 
-    ## --- blame ------------------------------------------------------------------
     gbl = "git blame -w";
 
-    ## --- branch -----------------------------------------------------------------
     gb = "git branch";
     gba = "git branch --all";
     gbd = "git branch --delete";
@@ -102,7 +100,6 @@ in
     gbgd = ''LANG=C git branch --no-color -vv | grep ": gone]" | cut -c 3- | awk '{print $1}' | xargs git branch -d'';
     gbgD = ''LANG=C git branch --no-color -vv | grep ": gone]" | cut -c 3- | awk '{print $1}' | xargs git branch -D'';
 
-    ## --- checkout ---------------------------------------------------------------
     gco = "git checkout";
     gcor = "git checkout --recurse-submodules";
     gcb = "git checkout -b";
@@ -110,19 +107,15 @@ in
     gcd = "git checkout ${devBranch}";
     gcm = "git checkout ${mainBranch}";
 
-    ## --- cherry-pick ------------------------------------------------------------
     gcp = "git cherry-pick";
     gcpa = "git cherry-pick --abort";
     gcpc = "git cherry-pick --continue";
 
-    ## --- clean ------------------------------------------------------------------
     gclean = "git clean --interactive -d";
 
-    ## --- clone ------------------------------------------------------------------
     gcl = "git clone --recurse-submodules";
     gclf = "git clone --recursive --shallow-submodules --filter=blob:none --also-filter-submodules";
 
-    ## --- commit -----------------------------------------------------------------
     gc = "git commit --verbose";
     "gc!" = "git commit --verbose --amend";
     gca = "git commit --verbose --all";
@@ -143,10 +136,8 @@ in
     gcss = "git commit --gpg-sign --signoff";
     gcssm = "git commit --gpg-sign --signoff --message";
 
-    ## --- describe ---------------------------------------------------------------
     gdct = "git describe --tags $(git rev-list --tags --max-count=1)";
 
-    ## --- diff -------------------------------------------------------------------
     gd = "git diff";
     gdca = "git diff --cached";
     gdcw = "git diff --cached --word-diff";
@@ -155,17 +146,14 @@ in
     gdup = "git diff @{upstream}";
     gdw = "git diff --word-diff";
 
-    ## --- fetch ------------------------------------------------------------------
     gf = "git fetch";
     gfa = "git fetch --all --tags --prune --jobs=10";
     gfo = "git fetch origin";
 
-    ## --- gui / help -------------------------------------------------------------
     gg = "git gui citool";
     gga = "git gui citool --amend";
     ghh = "git help";
 
-    ## --- log --------------------------------------------------------------------
     glg = "git log --stat";
     glgp = "git log --stat --patch";
     glgg = "git log --graph";
@@ -180,11 +168,9 @@ in
     glod = ''git log --graph --pretty="%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ad) %C(bold blue)<%an>%Creset"'';
     glods = ''git log --graph --pretty="%Cred%h%Creset -%C(auto)%d%Creset %s %Cgreen(%ad) %C(bold blue)<%an>%Creset" --date=short'';
 
-    ## --- ls-files ---------------------------------------------------------------
     gfg = "git ls-files | grep";
     gignored = ''git ls-files -v | grep "^[[:lower:]]"'';
 
-    ## --- merge ------------------------------------------------------------------
     gm = "git merge";
     gma = "git merge --abort";
     gmc = "git merge --continue";
@@ -195,7 +181,6 @@ in
     gmtl = "git mergetool --no-prompt";
     gmtlvim = "git mergetool --no-prompt --tool=vimdiff";
 
-    ## --- pull -------------------------------------------------------------------
     gl = "git pull";
     gluc = "git pull upstream ${curBranch}";
     glum = "git pull upstream ${mainBranch}";
@@ -209,7 +194,6 @@ in
     gprumi = "git pull --rebase=interactive upstream ${mainBranch}";
     gprv = "git pull --rebase -v";
 
-    ## --- push -------------------------------------------------------------------
     gp = "git push";
     gpd = "git push --dry-run";
     gpf = "git push --force-with-lease --force-if-includes";
@@ -222,7 +206,6 @@ in
     ggpush = ''git push origin "$(git_current_branch)"'';
     gpu = "git push upstream";
 
-    ## --- rebase -----------------------------------------------------------------
     grb = "git rebase";
     grba = "git rebase --abort";
     grbc = "git rebase --continue";
@@ -234,10 +217,8 @@ in
     grbs = "git rebase --skip";
     grbum = "git rebase upstream/${mainBranch}";
 
-    ## --- reflog -----------------------------------------------------------------
     grf = "git reflog";
 
-    ## --- remote -----------------------------------------------------------------
     gr = "git remote";
     gra = "git remote add";
     grmv = "git remote rename";
@@ -246,7 +227,6 @@ in
     grup = "git remote update";
     grv = "git remote --verbose";
 
-    ## --- reset ------------------------------------------------------------------
     grh = "git reset";
     grhh = "git reset --hard";
     grhk = "git reset --keep";
@@ -256,26 +236,21 @@ in
     gpristine = "git reset --hard && git clean --force -dfx";
     gwipe = "git reset --hard && git clean --force -df";
 
-    ## --- restore ----------------------------------------------------------------
     grs = "git restore";
     grss = "git restore --source";
     grst = "git restore --staged";
 
-    ## --- revert -----------------------------------------------------------------
     grev = "git revert";
     greva = "git revert --abort";
     grevc = "git revert --continue";
 
-    ## --- rm --------------------------------------------------------------------
     grm = "git rm";
     grmc = "git rm --cached";
 
-    ## --- shortlog / show -------------------------------------------------------
     gcount = "git shortlog --summary --numbered";
     gsh = "git show";
     gsps = "git show --pretty=short --show-signature";
 
-    ## --- stash ------------------------------------------------------------------
     gsta = "git stash push";
     gstaa = "git stash apply";
     gstall = "git stash --all";
@@ -286,43 +261,35 @@ in
     gsts = "git stash show --patch";
     gstu = "git stash push --include-untracked";
 
-    ## --- status -----------------------------------------------------------------
     gst = "git status";
     gss = "git status --short";
     gsb = "git status --short --branch";
 
-    ## --- submodule --------------------------------------------------------------
     gsi = "git submodule init";
     gsu = "git submodule update";
 
-    ## --- svn --------------------------------------------------------------------
     gsd = "git svn dcommit";
     gsr = "git svn rebase";
     git-svn-dcommit-push = "git svn dcommit && git push github ${mainBranch}:svntrunk";
 
-    ## --- switch -----------------------------------------------------------------
     gsw = "git switch";
     gswc = "git switch --create";
     gswd = "git switch ${devBranch}";
     gswm = "git switch ${mainBranch}";
 
-    ## --- tag --------------------------------------------------------------------
     gta = "git tag --annotate";
     gts = "git tag --sign";
     gtv = "git tag | sort -V";
 
-    ## --- update-index -----------------------------------------------------------
     gignore = "git update-index --assume-unchanged";
     gunignore = "git update-index --no-assume-unchanged";
 
-    ## --- worktree ---------------------------------------------------------------
     gwt = "git worktree";
     gwta = "git worktree add";
     gwtls = "git worktree list";
     gwtmv = "git worktree move";
     gwtrm = "git worktree remove";
 
-    ## --- misc -------------------------------------------------------------------
     grt = ''cd "$(git rev-parse --show-toplevel || echo .)"'';
     gwch = "git log --patch --abbrev-commit --pretty=medium --raw";
   };
