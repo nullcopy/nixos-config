@@ -20,8 +20,8 @@ in
   programs.nixvim = {
     enable = true;
     defaultEditor = true;
-    viAlias = true;
-    vimAlias = true;
+    viAlias = false;
+    vimAlias = false;
     withRuby = false;
     withPython3 = false;
 
