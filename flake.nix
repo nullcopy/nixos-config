@@ -38,26 +38,22 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # Default Rust toolchain — used by this flake's devShell and intended as
-      # the baseline for ad-hoc work. Per-project flakes should pin their own
-      # toolchain (e.g. via rust-toolchain.toml + fenix.fromToolchainFile).
-      rustToolchain = fenix.packages.${system}.combine [
-        fenix.packages.${system}.stable.cargo
-        fenix.packages.${system}.stable.rustc
-        fenix.packages.${system}.stable.rustfmt
-        fenix.packages.${system}.stable.clippy
-        fenix.packages.${system}.stable.rust-src
-        fenix.packages.${system}.stable.rust-analyzer
-      ];
+      # Each shell lives in its own file under ./devShells; add a new one by
+      # dropping a file there and listing it below. Enter with
+      # `nix develop /path/to/this/flake` (or `#<name>` for a non-default).
+      mkDevShell = file: import file { inherit pkgs system fenix; };
     in
     {
       formatter.${system} = pkgs.nixfmt;
 
-      # `nix develop` here (or via direnv `use flake`) puts cargo, rustc,
-      # rustfmt, clippy, and rust-analyzer on PATH. Launch `nvim` from inside
-      # this shell so its rust-analyzer matches the project's rustfmt/clippy.
-      devShells.${system}.default = pkgs.mkShell {
-        packages = [ rustToolchain ];
+      # devShells: each entry sources a file under ./devShells. To add a
+      # new shell, drop e.g. `./devShells/embedded-arm.nix` (a function
+      # taking { pkgs, system, fenix }) and list it here as
+      # `embedded-arm = mkDevShell ./devShells/embedded-arm.nix;`. Enter
+      # with `nix develop /path/to/flake#embedded-arm`; the unnamed
+      # `default` is what `nix develop /path/to/flake` picks up.
+      devShells.${system} = {
+        default = mkDevShell ./devShells/default.nix;
       };
 
       nixosConfigurations = {
