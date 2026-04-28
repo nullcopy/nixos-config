@@ -12,6 +12,9 @@
     "flakes"
   ];
 
+  # Grayjay ships under the Source First License, which nixpkgs marks unfree.
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "grayjay" ];
+
   # Garbage collection for nix generations
   nix.gc = {
     automatic = true;

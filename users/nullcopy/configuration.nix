@@ -19,6 +19,7 @@
     brave
     nerd-fonts.jetbrains-mono
     fzf
+    grayjay
   ];
 
   ## ----- session variables ---------------------------------------------------
