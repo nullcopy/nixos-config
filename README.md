@@ -5,22 +5,28 @@ Personal NixOS flake. Host configs + home-manager, keyed by machine name.
 ## Layout
 
 ```
-flake.nix              # inputs + nixosConfigurations
+flake.nix              # inputs + nixosConfigurations + devShells
 common/
   configuration.nix    # base system (nix, locale, net, audio, base pkgs)
   desktop.nix          # niri + greetd + xdg portals
+devShells/
+  default.nix          # kitchen-sink dev shell (see "devShells")
 hosts/
   wisp/                # per-machine module
-    configuration.nix  # imports hw + desktop + user group
+    configuration.nix  # imports hw + desktop + ollama + user group
     hardware-configuration.nix
     yubikey-luks.nix   # Yubikey 2FA LUKS unlock
+    ollama.nix         # ROCm ollama + GTT tuning for Strix Halo iGPU
 users/
   nullcopy/
-    configuration.nix  # home-manager module
+    configuration.nix  # home-manager module (imports the files below)
+    aliases.nix        # zsh + oh-my-zsh-style git aliases
+    neovim.nix         # nixvim config (AstroNvim-flavoured UX)
+    tailscale.nix      # per-user `tailscale up` service
     noctalia/          # tracked noctalia-shell config (see "Noctalia")
 ```
 
-Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`.
+Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
 
 ## First-time setup on a new machine
 
@@ -85,6 +91,12 @@ nix flake lock --update-input nixpkgs   # bump one input
    ```nix
    home-manager.users.<name> = import ./users/<name>/configuration.nix;
    ```
+
+## devShells
+
+`devShells/default.nix` is a kitchen-sink shell covering every language used by the nixvim LSP config — a fallback for ad-hoc work in projects that don't ship their own flake. Real projects should define their own `devShells.default` and load it via direnv (`echo 'use flake' > .envrc && direnv allow`).
+
+To add another shell, drop a file like `./devShells/embedded-arm.nix` (a function taking `{ pkgs, system, fenix }`) and list it in `flake.nix` alongside `default`. Enter named shells with `nix develop /path/to/flake#<name>`.
 
 ## Noctalia config
 
