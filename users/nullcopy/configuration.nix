@@ -67,6 +67,24 @@
     settings.font.normal.family = "JetBrainsMono Nerd Font";
   };
 
+  # direnv: per-directory environment loader. When you `cd` into a directory
+  # containing a `.envrc`, direnv exports its env into your current shell;
+  # leave the directory and it unloads. nix-direnv adds the `use flake`
+  # builtin so `.envrc` can be a one-liner that loads a project's devShell
+  # (and caches the evaluation so repeat `cd`s are instant).
+  #
+  # Per-project setup:
+  #   1. Project has a `flake.nix` defining `devShells.<system>.default`.
+  #   2. Add a `.envrc` next to it containing:  use flake
+  #   3. First time only, run `direnv allow` — direnv won't auto-execute an
+  #      .envrc until you've explicitly trusted it.
+  # From then on, `cd` into the project loads the toolchain defined in
+  # flake.nix (cargo/rustfmt/clang/etc) into your shell automatically.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
   programs.gpg.enable = true;
 
   programs.git = {

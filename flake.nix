@@ -18,6 +18,11 @@
       url = "github:nix-community/nixvim";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -26,14 +31,34 @@
       nixpkgs,
       home-manager,
       noctalia,
+      fenix,
       ...
     }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+
+      # Default Rust toolchain — used by this flake's devShell and intended as
+      # the baseline for ad-hoc work. Per-project flakes should pin their own
+      # toolchain (e.g. via rust-toolchain.toml + fenix.fromToolchainFile).
+      rustToolchain = fenix.packages.${system}.combine [
+        fenix.packages.${system}.stable.cargo
+        fenix.packages.${system}.stable.rustc
+        fenix.packages.${system}.stable.rustfmt
+        fenix.packages.${system}.stable.clippy
+        fenix.packages.${system}.stable.rust-src
+        fenix.packages.${system}.stable.rust-analyzer
+      ];
     in
     {
       formatter.${system} = pkgs.nixfmt;
+
+      # `nix develop` here (or via direnv `use flake`) puts cargo, rustc,
+      # rustfmt, clippy, and rust-analyzer on PATH. Launch `nvim` from inside
+      # this shell so its rust-analyzer matches the project's rustfmt/clippy.
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [ rustToolchain ];
+      };
 
       nixosConfigurations = {
 

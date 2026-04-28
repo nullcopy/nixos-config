@@ -213,12 +213,17 @@ in
           marksman.enable = true;
           nil_ls.enable = true;
           pyright.enable = true;
+          # rust-analyzer relies on the surrounding shell's PATH for cargo /
+          # rustc / rustfmt / clippy — pin those per project via a fenix
+          # devShell and launch `nvim` from inside `nix develop` so formatting
+          # and lints match the project's toolchain. Without a devShell active
+          # the LSP will fail to start (`rustc` not found); that's intended.
+          # The install* = false flags suppress nixvim's "you should bundle
+          # cargo/rustc" warnings — we deliberately want them PATH-resolved.
           rust_analyzer = {
             enable = true;
-            # rust-analyzer's root_dir probe shells out to `rustc --print sysroot`.
-            # Bundle both so opening a Rust file doesn't fail with ENOENT.
-            installCargo = true;
-            installRustc = true;
+            installCargo = false;
+            installRustc = false;
           };
           yamlls.enable = true;
         };
