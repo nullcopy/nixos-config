@@ -52,8 +52,15 @@
     autosuggestion.enable = true;
     historySubstringSearch = {
       enable = true;
-      searchUpKey = [ "^[[A" ]; # Up arrow
-      searchDownKey = [ "^[[B" ]; # Down arrow
+      # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
+      searchUpKey = [
+        "^[[A"
+        "^[OA"
+      ]; # Up arrow
+      searchDownKey = [
+        "^[[B"
+        "^[OB"
+      ]; # Down arrow
     };
   };
 
