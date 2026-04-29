@@ -18,6 +18,16 @@
   boot.loader.efi.canTouchEfiVariables = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
+  # Crash triage — see ./crash-triage.md.
+  # Diagnoses suspected SLUB freelist corruption around s2idle resume.
+  # Remove once the underlying driver bug is identified or a workaround lands.
+  boot.kernelParams = [
+    "consoleblank=0"
+    "slub_debug=FZP"
+    "slab_nomerge"
+    "panic_on_warn=1"
+  ];
+
   ## ----- hardware ------------------------------------------------------------
   hardware.graphics.enable = true;
 
