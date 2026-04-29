@@ -19,20 +19,24 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # Crash triage — see ./crash-triage.md.
-  # Confirmed: kernel use-after-free, ~16-byte structured write into freed
-  # objects. Hits whatever cache recycles the slot (skbuff_small_head,
-  # anon_vma_chain so far). Producer unknown.
-  # mt7925e (WiFi 7) ruled out 2026-04-29 round 3.
-  # Round 4: shotgun-off all Strix-Halo-young drivers at once.
-  # If clean → bisect back; if dirty → BIOS/microcode/RAM, not a driver.
-  # amdgpu intentionally left on (mature, and disabling it confounds the
-  # display path).
+  # Round 4 result: shotgun-off of young drivers changed the failure mode
+  # from UAF/oops to a hard hang (RCU stall + soft-lockup on
+  # inotify_group->notification_lock, captured in journalctl -k -b -1, no
+  # pstore because no panic). mt7925_common was still loaded — pulled in
+  # by Mediatek bluetooth even with mt7925e blacklisted.
+  # Round 5: extend blacklist to mt7925_common (close the BT gap) and
+  # amdgpu (last Strix-Halo-young driver candidate). Add watchdog-panic
+  # params so the next stall panics → pstore captures all-CPU register
+  # state, revealing the spinlock holder.
   boot.kernelParams = [
     "consoleblank=0"
     "slub_debug=FZP"
     "slab_nomerge"
     "panic_on_warn=1"
-    "module_blacklist=mt7925e,amdxdna,amd_isp4,pinctrl_amdisp,i2c_designware_amdisp,amd_pmf"
+    "softlockup_panic=1"
+    "panic_on_rcu_stall=1"
+    "rcu_cpu_stall_timeout=15"
+    "module_blacklist=mt7925e,mt7925_common,amdxdna,amd_isp4,pinctrl_amdisp,i2c_designware_amdisp,amd_pmf,amdgpu"
   ];
 
   ## ----- hardware ------------------------------------------------------------

@@ -1,0 +1,443 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/Projects/nixos-config/main
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ Take a look at help-sessions/README.md. This is the start of a new help       
+  session. Get setup, and then I will share the results of my actions after the 
+   previous session                                                             
+
+  Read 3 files, listed 2 directories (ctrl+o to expand)
+
+● I'm caught up on round 3. The state is:
+
+  - Diagnosis is a generic kernel UAF with a 16-byte pointer-shaped write
+  fingerprint, hitting whatever cache happens to recycle the freed slot.
+  - mt7925e is ruled out (round 3 crashed with it blacklisted).
+  - Round 4 plan: shotgun-blacklist all young Strix Halo drivers (mt7925e,
+  amdxdna, amd_isp4, pinctrl_amdisp, i2c_designware_amdisp, amd_pmf). amdgpu
+  intentionally left enabled.
+  - Config was staged and committed in 22adaad; user was to rebuild, reboot,
+  soak ≥30 min in TTY, then report results.
+
+  Let me set up the round 4 session directory.
+
+● Bash(date -u +%Y-%m-%dT%H%M%SZ)
+  ⎿  2026-04-29T141642Z
+
+● Bash(mkdir /home/nullcopy/Projects/nixos-config/main/help-sessions/help-sessio
+      n-2026-04-29T141642Z)
+  ⎿  Done
+
+● Round 4 session dir is ready: help-sessions/help-session-2026-04-29T141642Z/.
+  Go ahead and share the soak results — lsmod output for the blacklisted
+  modules, whether it crashed or stayed clean for ≥30 min, and any new pstore
+  entries.
+
+✻ Baked for 30s
+
+❯ I just ran the test (rbuild-switch, reboot, drop to TTY). The system hung     
+  after only a minute or so. FYI, AFTER the test completed, I re-enabled the    
+  modules, so that I have WiFi to chat with you. I confirmed the modules were   
+  properly disabled during the test.                                            
+
+● Round 4 result: shotgun-off of all six Strix-Halo-young drivers — system still
+   crashed at ~1 min. That exonerates the entire driver axis
+  (driver-young-on-this-silicon ≠ producer). Pivot to firmware/microcode.
+
+  Please grab the new pstore dump so I can confirm the same 16-byte-write
+  fingerprint, then we'll move to BIOS/LVFS:
+
+  sudo ls -lat /var/lib/systemd/pstore/ | head -10
+
+  Then paste the most recent dmesg.txt from that directory (or attach as
+  oops-2026-04-29T<HHMM>Z.txt in the new session dir).
+
+  After that, run an LVFS check (read-only, safe to run now):
+
+  nix shell nixpkgs#fwupd -c sudo fwupdmgr refresh
+  nix shell nixpkgs#fwupd -c sudo fwupdmgr get-devices
+  nix shell nixpkgs#fwupd -c sudo fwupdmgr get-updates
+
+  Share the get-devices and get-updates output. We'll decide together whether to
+   apply BIOS/EC updates before going further.
+
+❯    sudo ls -lat /var/lib/systemd/pstore/ | head -10                          
+                                                                                
+  total 0                                                                       
+  drwxr-xr-x 1 root root   6 Apr 29 08:27 1777460252                            
+  drwxr-xr-x 1 root root 840 Apr 29 08:27 .                                     
+  drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458629                            
+  drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458630                            
+  drwxr-xr-x 1 root root   6 Apr 29 04:50 1777456197                            
+  drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451130                            
+  drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451131                            
+  drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451132                            
+  drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451137                            
+                                                                                
+  wait... it looks like there isn't a new dmesg                                 
+
+● Bash(date -u +"%Y-%m-%dT%H%M%SZ  (epoch %s)")
+  ⎿  2026-04-29T142242Z  (epoch 1777472562)
+
+● You're right — newest pstore dir is 1777460252 (= 2026-04-29 ~10:57 UTC, mtime
+   08:27 local). Round 3's crash dump. Nothing new from round 4.
+
+  Two ways this happens:
+
+  1. Hard hang, not a panic. The earlier crashes were oopses that panic'd →
+  pstore wrote a backtrace. A pure hang (CPU lockup, IOMMU stall, firmware-level
+   wedge) doesn't go through the panic path and leaves no pstore entry. Given we
+   just shotgun'd off the drivers and the symptom changed from "crash with oops
+  at 5 min" to "freeze at 1 min", it's plausible we exposed a different failure
+  mode (the UAF was being papered over by surviving drivers, and now something
+  else hangs first).
+  2. Panic happened but pstore didn't flush. Less likely — pstore was reliable
+  in rounds 1-3.
+
+  Before pivoting, can you confirm what you saw at the freeze:
+
+  - TTY frozen with cursor stuck, no response to keys?
+  - Caps Lock LED toggle when you press it (kernel alive) or dead (kernel
+  wedged)?
+  - Any visible kernel splat on the TTY before it froze, or did it just stop?
+  - Was there a power-cycle / hard reset to recover, or did SysRq (Alt+SysRq+B)
+  work?
+
+  Also worth pulling — sometimes the previous boot's tail makes it to the
+  journal even without pstore:
+
+  sudo journalctl -k -b -1 | tail -100
+
+  That'll show whatever the kernel was logging in the seconds before the freeze
+  on the previous boot. If it ends mid-sentence or shows a hang/lockup warning,
+  that's our signal.
+
+❯ TTY frozen with cursor stuck. Cursor wasn't blinking, no response to keys,    
+  nothing.                                                                      
+  Caps lock LED did not toggle when I pressed it.                               
+  No visible kernel splat on the TTY. It just stopped, with the normal shell    
+  displayed, but completely unresponsive.                                       
+  I had to power cycle.                                                         
+
+● This is a genuine redesign moment — failure mode changed from "panic with
+  oops" (round 3) to "hard kernel/firmware wedge with no panic" (round 4).
+  That's significant signal.
+
+  What it tells us:
+
+  - Caps Lock dead = kernel itself wedged, not just userspace. Either CPU stuck
+  in a non-preemptible section, IOMMU stall, or firmware-level lockup (SMU/PSP).
+  - No pstore = no panic path executed. The UAF in earlier rounds at least
+  tripped slub_debug and panicked. A hard hang doesn't.
+  - Faster failure (1 min vs 5 min) with fewer drivers loaded is
+  counter-intuitive but not uncommon — it can mean the young drivers were
+  inadvertently delaying whichever component is now wedging us, or amdgpu (still
+   loaded, intentionally) is the actual producer and the round-1-3 UAFs were
+  collateral.
+
+  Three things to do, in order:
+
+  1. Pull the last-boot journal tail — the kernel may have logged something to
+  disk before the wedge even though pstore is empty:
+
+  sudo journalctl -k -b -1 | tail -200
+
+  Paste the tail. If it ends mid-line or shows a soft/hard-lockup warning,
+  that's our smoking gun.
+
+  2. Arm the hard-lockup detector so the next hang produces a panic + pstore
+  entry instead of a silent freeze. I'll stage a kernelParams change adding:
+
+  nmi_watchdog=1 hardlockup_panic=1 softlockup_panic=1
+
+  These cost ~nothing and turn "silent wedge" into "captured backtrace" for
+  round 5.
+
+  3. Decide round 5's variable. Two candidates:
+
+  - (a) amdgpu off (boot with nomodeset or blacklist amdgpu). This was deferred
+  earlier because disabling it changes the display path — but we now want that
+  change, since with everything-young off and amdgpu still loaded, amdgpu is the
+   only Strix-Halo-fresh driver left in the suspect set. Cost: graphical
+  environment won't come up; TTY still works.
+  - (b) BIOS/EC update via LVFS. Addresses microcode/SMU/PSP firmware.
+  Independent axis from drivers.
+
+  I'd run (a) first — it's fully reversible (just remove the boot param), tests
+  the last remaining young-driver hypothesis, and combined with the watchdog
+  change gives us either a clean soak or a captured backtrace. BIOS update next
+  if (a) doesn't help.
+
+  Send me the journalctl tail and I'll stage the kernelParams update for round
+  5.
+
+✻ Baked for 32s
+
+❯ Let's run (a) first. Here's the journalctl tail:                              
+                                                                                
+   sudo journalctl -k -b -1 | tail -200                                        
+  Apr 29 09:12:31 wisp kernel: input: HD-Audio Generic HDMI/DP,pcm=9 as         
+  /devices/pci0000:00/0000:00:08.1/0000:c3:00.1/sound/card0/input25             
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Cirrus 
+   Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)                               
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP    
+  system name: '103C8D01', amp name: 'AMP2'                                     
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: ALC245: picked 
+   fixup  for PCI SSID 103c:8d01                                                
+  Apr 29 09:12:31 wisp kernel: hp_bioscfg: Prerequisites size value exceeded    
+  the maximum number of elements supported or data may be malformed             
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: Found 4        
+  CSC3554 on i2c (-%s:00-cs35l54-hda.%d)                                        
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: autoconfig for 
+   ALC245: line_outs=1 (0x17/0x0/0x0/0x0/0x0) type:speaker                      
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0:                
+  speaker_outs=0 (0x0/0x0/0x0/0x0/0x0)                                          
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0:    hp_outs=1   
+  (0x21/0x0/0x0/0x0/0x0)                                                        
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0:    mono:       
+  mono_out=0x0                                                                  
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0:    inputs:     
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0:      Mic=0x19  
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Reset  
+  GPIO busy, assume shared reset                                                
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Cirrus 
+   Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)                               
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP    
+  system name: '103C8D01', amp name: 'AMP3'                                     
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Reset  
+  GPIO busy, assume shared reset                                                
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Cirrus 
+   Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)                               
+  Apr 29 09:12:31 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP    
+  system name: '103C8D01', amp name: 'AMP4'                                     
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: bound          
+  i2c-CSC3554:00-cs35l54-hda.0 (ops cs35l56_hda_comp_ops                        
+  [snd_hda_scodec_cs35l56])                                                     
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: bound          
+  i2c-CSC3554:00-cs35l54-hda.1 (ops cs35l56_hda_comp_ops                        
+  [snd_hda_scodec_cs35l56])                                                     
+  Apr 29 09:12:31 wisp kernel: snd_hda_codec_alc269 hdaudioC1D0: bound          
+  i2c-CSC3554:00-cs35l54-hda.2 (ops                                             
+  ──── (161 lines hidden) ───────────────────────────────────────────────────── 
+   wisp kernel:  ? __pfx_pollwake+0x10/0x10                                     
+  Apr 29 09:13:55 wisp kernel:  ? __pfx_pollwake+0x10/0x10                      
+  Apr 29 09:13:55 wisp kernel:  ? __pfx_pollwake+0x10/0x10                      
+  Apr 29 09:13:55 wisp kernel:  ? __pfx_pollwake+0x10/0x10                      
+  Apr 29 09:13:55 wisp kernel:  __x64_sys_ppoll+0xdf/0x180                      
+  Apr 29 09:13:55 wisp kernel:  do_syscall_64+0xb6/0x560                        
+  Apr 29 09:13:55 wisp kernel:  ? exc_page_fault+0x6a/0x150                     
+  Apr 29 09:13:55 wisp kernel:  entry_SYSCALL_64_after_hwframe+0x77/0x7f        
+  Apr 29 09:13:55 wisp kernel: RIP: 0033:0x7f75b7ea6922                         
+  Apr 29 09:13:55 wisp kernel: Code: 08 0f 85 51 36 ff ff 49 89 fb 48 89 f0 48  
+  89 d7 48 89 ce 4c 89 c2 4d 89 ca 4c 8b 44 24 08 4c 8b 4c 24 10 4c 89 5c 24 08 
+   0f 05 <c3> 66 2e 0f 1f 84 00 00 00 00 00 66 2e 0f 1f 84 00 00 00 00 00 66    
+  Apr 29 09:13:55 wisp kernel: RSP: 002b:00007ffef45e41c8 EFLAGS: 00000246      
+  ORIG_RAX: 000000000000010f                                                    
+  Apr 29 09:13:55 wisp kernel: RAX: ffffffffffffffda RBX: 00007f75b3e752a0 RCX: 
+   00007f75b7ea6922                                                             
+  Apr 29 09:13:55 wisp kernel: RDX: 00007ffef45e4230 RSI: 0000000000000015 RDI: 
+   00007f7590ac6f00                                                             
+  Apr 29 09:13:55 wisp kernel: RBP: 00007ffef45e41f0 R08: 0000000000000008 R09: 
+   0000000000000000                                                             
+  Apr 29 09:13:55 wisp kernel: R10: 0000000000000000 R11: 0000000000000246 R12: 
+   000000007fffffff                                                             
+  Apr 29 09:13:55 wisp kernel: R13: 0000000000000015 R14: 00007ffef45e4290 R15: 
+   00007f7590ac6f00                                                             
+  Apr 29 09:13:55 wisp kernel:  </TASK>                                         
+  Apr 29 09:14:19 wisp kernel: watchdog: BUG: soft lockup - CPU#6 stuck for     
+  44s! [.quickshell-wra:2603]                                                   
+  Apr 29 09:14:19 wisp kernel: Modules linked in: rfcomm snd_seq_dummy          
+  snd_hrtimer snd_seq snd_seq_device hid_sensor_gyro_3d hid_sensor_prox         
+  hid_sensor_trigger industrialio_triggered_buffer kfifo_buf                    
+  hid_sensor_iio_common industrialio hid_sensor_hub fuse cmac algif_hash        
+  algif_skcipher af_alg tun bnep amdgpu snd_acp_legacy_mach snd_acp_mach        
+  snd_soc_nau8821 snd_acp3x_rn snd_acp70 snd_acp_i2s snd_acp_pdm snd_soc_dmic   
+  snd_acp_pcm snd_sof_amd_acp70 snd_sof_amd_acp63 snd_hda_scodec_cs35l56_spi    
+  regmap_spi snd_sof_amd_vangogh snd_sof_amd_rembrandt snd_sof_amd_renoir       
+  snd_sof_amd_acp snd_sof_pci snd_sof_xtensa_dsp snd_sof snd_ctl_led            
+  snd_hda_codec_alc269 snd_sof_utils snd_hda_scodec_component snd_pci_ps        
+  snd_hda_codec_realtek_lib snd_soc_acpi_amd_match snd_amd_sdw_acpi             
+  snd_hda_codec_generic soundwire_amd soundwire_generic_allocation              
+  soundwire_bus snd_hda_codec_atihdmi snd_soc_sdca snd_hda_codec_hdmi           
+  snd_soc_core snd_hda_intel snd_hda_codec snd_compress hp_bioscfg ac97_bus     
+  snd_pcm_dmaengine snd_hda_core snd_rpl_pci_acp6x mt7925_common snd_acp_pci    
+
+● Big redesign-level signal in that journal tail. Reading what actually happened
+   in round 4:
+
+  Apr 29 09:13:55 rcu_preempt self-detected stall on CPU 6
+  RIP: native_queued_spin_lock_slowpath+0x28a/0x2c0
+  Call Trace: __x64_sys_ppoll → do_sys_poll → inotify_poll → _raw_spin_lock
+  Comm: .quickshell-wra
+  ...
+  Apr 29 09:14:19 watchdog: BUG: soft lockup - CPU#6 stuck for 44s!
+  Modules linked in: ... mt7925_common ...
+
+  Three things this tells us:
+
+  1. It's a kernel spinlock deadlock, not a UAF. Round 4 changed the failure
+  mode entirely. Round 1–3 were structured 16-byte writes-after-free producing
+  oopses. Round 4 is CPU 6 spinning forever on inotify_group->notification_lock
+  because some other CPU is holding the lock and never releasing it. This is
+  consistent with no panic + caps-lock dead: a different CPU is wedged in a
+  non-preemptible section.
+  2. mt7925_common is still loaded even though mt7925e was blacklisted. That's
+  the Mediatek shared library used by both the WiFi driver and the Mediatek
+  Bluetooth driver. With WiFi off, Bluetooth pulled it in. So the shotgun didn't
+   fully exclude the WiFi-7 code path. We need to add mt7925_common (and the BT
+  bridge) to the blacklist, OR just kill bluetooth too.
+  3. The freeze does leave evidence — in the journal, not pstore. journalctl -k 
+  -b -1 captured the RCU stall and soft-lockup before things wedged. So we don't
+   need pstore for soft-lockup hangs; we just need to make the kernel panic on
+  stall so we get a full multi-CPU register dump that shows the lock holder, not
+   just CPU 6.
+
+  This changes the round 5 plan. Doing only "amdgpu off" loses information —
+  we'd want to combine with watchdog-panic params anyway, and we should also
+  patch the mt7925_common gap. Proposed round 5 additions:
+
+  - Kernel params: softlockup_panic=1 panic_on_rcu_stall=1 
+  rcu_cpu_stall_timeout=15 — turn the next stall into a panic so pstore catches
+  all CPU states (we'll see who's holding the lock).
+  - Extend blacklist: add mt7925_common (close the BT-pulls-WiFi-shared-code
+  gap), and add amdgpu (executes the original plan-a — last young-driver
+  candidate left).
+
+  Let me stage this.
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 13 lines, removed 9 lines
+      19    boot.kernelPackages = pkgs.linuxPackages_latest;
+      20  
+      21    # Crash triage — see ./crash-triage.md.
+      22 -  # Confirmed: kernel use-after-free, ~16-byte structured write
+         - into freed                                                    
+      23 -  # objects. Hits whatever cache recycles the slot (skbuff_smal
+         -l_head,                                                        
+      24 -  # anon_vma_chain so far). Producer unknown.                  
+      25 -  # mt7925e (WiFi 7) ruled out 2026-04-29 round 3.             
+      26 -  # Round 4: shotgun-off all Strix-Halo-young drivers at once. 
+      27 -  # If clean → bisect back; if dirty → BIOS/microcode/RAM, not 
+         -a driver.                                                      
+      28 -  # amdgpu intentionally left on (mature, and disabling it conf
+         -ounds the                                                      
+      29 -  # display path).                                             
+      22 +  # Round 4 result: shotgun-off of young drivers changed the fa
+         +ilure mode                                                     
+      23 +  # from UAF/oops to a hard hang (RCU stall + soft-lockup on   
+      24 +  # inotify_group->notification_lock, captured in journalctl -k
+         + -b -1, no                                                     
+      25 +  # pstore because no panic). mt7925_common was still loaded — 
+         +pulled in                                                      
+      26 +  # by Mediatek bluetooth even with mt7925e blacklisted.       
+      27 +  # Round 5: extend blacklist to mt7925_common (close the BT ga
+         +p) and                                                         
+      28 +  # amdgpu (last Strix-Halo-young driver candidate). Add watchd
+         +og-panic                                                       
+      29 +  # params so the next stall panics → pstore captures all-CPU r
+         +egister                                                        
+      30 +  # state, revealing the spinlock holder.                      
+      31    boot.kernelParams = [
+      32      "consoleblank=0"
+      33      "slub_debug=FZP"
+      34      "slab_nomerge"
+      35      "panic_on_warn=1"
+      35 -    "module_blacklist=mt7925e,amdxdna,amd_isp4,pinctrl_amdisp,i
+         -2c_designware_amdisp,amd_pmf"                                  
+      36 +    "softlockup_panic=1"                                       
+      37 +    "panic_on_rcu_stall=1"                                     
+      38 +    "rcu_cpu_stall_timeout=15"                                 
+      39 +    "module_blacklist=mt7925e,mt7925_common,amdxdna,amd_isp4,pi
+         +nctrl_amdisp,i2c_designware_amdisp,amd_pmf,amdgpu"             
+      40    ];
+      41  
+      42    ## ----- hardware -------------------------------------------
+          -----------------
+
+● Staged. Summary of round 5 changes to hosts/wisp/configuration.nix:
+
+  Blacklist additions:
+  - mt7925_common — closes the gap where Mediatek BT was pulling in WiFi-7
+  shared code even with mt7925e blacklisted
+  - amdgpu — last young Strix-Halo driver candidate (executes plan-a)
+
+  New watchdog-panic params:
+  - softlockup_panic=1 — soft-lockup → panic
+  - panic_on_rcu_stall=1 — RCU stall → panic
+  - rcu_cpu_stall_timeout=15 — fire faster (default is 21s; tighten to 15)
+
+  Net effect: if it stalls again, you'll get a real panic with a multi-CPU
+  register dump in pstore, which will show whichever CPU is holding the lock —
+  that's the producer.
+
+  Caveats for the soak:
+  - No GPU output past early-boot framebuffer. With amdgpu blacklisted,
+  X/Wayland won't start; fbcon should still give you a TTY at low resolution. If
+   the framebuffer doesn't come up at all, we'll need nomodeset instead.
+  - No WiFi and no Bluetooth. mt7925_common gone means BT also dies. Plan
+  offline; ethernet via dock if you have one.
+
+  Want me to also write the round 5 findings + actions docs in the new session
+  dir, or wait until you've actually run the test?
+
+✻ Cooked for 1m 38s
+
+❯ Go ahead and write everything down and wrap up this help session. Then I'll   
+  run the test                                                                  
+
+● Write(help-sessions/help-session-2026-04-29T141642Z/findings.md)
+  ⎿  Wrote 138 lines to
+     help-sessions/help-session-2026-04-29T141642Z/findings.md
+       2 name: Help session findings — round 4
+       3 description: Wisp crash triage round 4: shotgun-off of young dri
+         vers changed failure mode from UAF to spinlock hang; redesign fo
+       4 type: project
+       5 ---
+       6 
+       8 # Help session findings — round 4
+       9 Continuation of crash triage on wisp (HP ZBook Ultra G1a / Strix
+          Halo).
+      10 - Round 1: `../help-session-2026-04-29T090255Z/findings.md`
+     … +147 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-29T141642Z/actions.md)
+  ⎿  Wrote 129 lines to
+     help-sessions/help-session-2026-04-29T141642Z/actions.md
+      1 ---
+      2 name: actions — wisp crash triage, round 4
+      3 description: What was changed in round 4, what the user needs to 
+        do before round 5
+      4 type: project
+      5 ---
+      6 
+      7 # actions — wisp crash triage, round 4
+      8 
+      9 ## Done this session (2026-04-29)
+     … +123 lines (ctrl+o to expand)
+
+● Wrap-up:
+
+  - help-sessions/help-session-2026-04-29T141642Z/findings.md — round 4 result,
+  redesign rationale (UAF → spinlock deadlock, mt7925_common gap, journal-tail
+  technique), round 5 plan and outcome matrix.
+  - help-sessions/help-session-2026-04-29T141642Z/actions.md — what was changed
+  in hosts/wisp/configuration.nix, the user-facing test steps, expected behavior
+   with amdgpu/WiFi/BT all off, and the bisect/firmware branches keyed off round
+   5's outcome.
+  - hosts/wisp/configuration.nix — round 5 kernelParams staged (extended
+  blacklist + watchdog-panic params + updated comment).
+
+  Two things still on you per help-sessions/README.md:
+
+  1. Run /export and save the verbatim conversation to
+  help-sessions/help-session-2026-04-29T141642Z/chat.log.
+  2. Commit, so the round-5 staged config + session docs are durable before you
+  reboot.
+
+  Then run the test as described in actions.md.
+✻ Cogitated for 1m 47s
