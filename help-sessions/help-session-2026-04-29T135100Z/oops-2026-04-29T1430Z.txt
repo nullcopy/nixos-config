@@ -1,0 +1,319 @@
+Round 3 panic — wisp, 2026-04-29
+
+Captured after rebuilding with kernelParams including
+`module_blacklist=mt7925e`. Module was confirmed not loaded during
+the soak (kernel logged `Module mt7925e is blacklisted` at boot+21s);
+user re-loaded mt7925e *after* the crash to chat. So the test was
+valid: WiFi off, system still crashed.
+
+Crash time: kernel timestamp ~294 s (so ~5 min after boot — much
+faster than round 2).
+
+Detector: SLUB, on alloc of `anon_vma_chain` (NOT skbuff_small_head).
+Trigger path: `wpctl` (PipeWire control) called `mprotect()` →
+`__split_vma` → `anon_vma_clone` → `kmem_cache_alloc_noprof`. SLUB
+walked the partial-slab freelist, hit the corrupted node, panicked.
+
+Corruption signature (identical shape to round 2):
+- @offset=48, first byte 0xbc instead of poison 0x6b
+- 16 bytes overwritten in the body of a freed object:
+    bc 5e 06 d6 d2 37 1f 85   b5 0a 6b 50 35 9c 3b f4
+- Plus byte 0xa5 in place of 0x6b near the end of the object
+  (likely freelist next-pointer adjacent — TBD)
+- Redzones (0xbb...) and slab padding (0x5a...) intact: writer hit
+  the *object body*, not an adjacent slot.
+
+Two pointer-shaped 8-byte values overwritten. Same fingerprint as
+round 2's `skbuff_small_head` corruption — that one was 16 bytes at
+offset=1728 of a much larger object.
+
+Pstore directory: /var/lib/systemd/pstore/1777460252/001/dmesg.txt
+(20 EFI variable slots, one panic, captured cleanly.)
+
+# Raw paste — list of pstore dirs on the box at chat time
+
+total 0
+drwxr-xr-x 1 root root   6 Apr 29 08:27 1777460252  ← this round
+drwxr-xr-x 1 root root 840 Apr 29 08:27 .
+drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458629
+drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458630
+drwxr-xr-x 1 root root   6 Apr 29 04:50 1777456197
+drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451130
+drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451131
+drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451132
+drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451137
+
+# Raw dmesg (reassembled from EFI pstore parts 1–18, in time order)
+
+[   21.065042] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Reset GPIO busy, assume shared reset
+[   21.071957] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Cirrus Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)
+[   21.086349] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP system name: '103C8D01', amp name: 'AMP2'
+[   21.088967] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Reset GPIO busy, assume shared reset
+[   21.095901] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Cirrus Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)
+[   21.107080] snd_hda_intel 0000:c3:00.1: enabling device (0000 -> 0002)
+[   21.107328] snd_hda_intel 0000:c3:00.6: enabling device (0000 -> 0002)
+[   21.110265] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP system name: '103C8D01', amp name: 'AMP3'
+[   21.113143] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Reset GPIO busy, assume shared reset
+[   21.149817] [drm] Initialized amdxdna_accel_driver 0.6.0 for 0000:c4:00.1 on minor 0
+[   21.150534] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Cirrus Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)
+[   21.158947] input: SYNA3133:00 06CB:CFE2 Mouse as /devices/platform/AMDI0010:00/i2c-0/i2c-SYNA3133:00/0018:06CB:CFE2.0006/input/input23
+[   21.159035] input: SYNA3133:00 06CB:CFE2 Touchpad as /devices/platform/AMDI0010:00/i2c-0/i2c-SYNA3133:00/0018:06CB:CFE2.0006/input/input24
+[   21.159569] hid-multitouch 0018:06CB:CFE2.0006: input,hidraw3: I2C HID v1.00 Mouse [SYNA3133:00 06CB:CFE2] on i2c-SYNA3133:00
+[   21.161495] hp_bioscfg: Prerequisites size value exceeded the maximum number of elements supported or data may be malformed
+[   21.165754] input: HD-Audio Generic HDMI/DP,pcm=3 as /devices/pci0000:00/0000:00:08.1/0000:c3:00.1/sound/card0/input26
+[   21.165968] input: HD-Audio Generic HDMI/DP,pcm=7 as /devices/pci0000:00/0000:00:08.1/0000:c3:00.1/sound/card0/input27
+[   21.166111] input: HD-Audio Generic HDMI/DP,pcm=8 as /devices/pci0000:00/0000:00:08.1/0000:c3:00.1/sound/card0/input28
+[   21.166204] input: HD-Audio Generic HDMI/DP,pcm=9 as /devices/pci0000:00/0000:00:08.1/0000:c3:00.1/sound/card0/input29
+[   21.166898] hp_bioscfg: Prerequisites size value exceeded the maximum number of elements supported or data may be malformed
+[   21.169788] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP system name: '103C8D01', amp name: 'AMP4'
+[   21.170225] hp_bioscfg: Prerequisites size value exceeded the maximum number of elements supported or data may be malformed
+[   21.176155] mousedev: PS/2 mouse device common for all mice
+[   21.177425] Module mt7925e is blacklisted     ← bisect target rejected
+[   21.188998] snd_hda_codec_alc269 hdaudioC1D0: ALC245: picked fixup  for PCI SSID 103c:8d01
+[   21.189151] snd_hda_codec_alc269 hdaudioC1D0: Found 4 CSC3554 on i2c (-%s:00-cs35l54-hda.%d)
+[   21.189207] snd_hda_codec_alc269 hdaudioC1D0: bound i2c-CSC3554:00-cs35l54-hda.0 (ops cs35l56_hda_comp_ops [snd_hda_scodec_cs35l56])
+[   21.189227] snd_hda_codec_alc269 hdaudioC1D0: bound i2c-CSC3554:00-cs35l54-hda.1 (ops cs35l56_hda_comp_ops [snd_hda_scodec_cs35l56])
+[   21.189243] snd_hda_codec_alc269 hdaudioC1D0: bound i2c-CSC3554:00-cs35l54-hda.2 (ops cs35l56_hda_comp_ops [snd_hda_scodec_cs35l56])
+[   21.189260] snd_hda_codec_alc269 hdaudioC1D0: bound i2c-CSC3554:00-cs35l54-hda.3 (ops cs35l56_hda_comp_ops [snd_hda_scodec_cs35l56])
+[   21.190233] snd_hda_codec_alc269 hdaudioC1D0: autoconfig for ALC245: line_outs=1 (0x17/0x0/0x0/0x0/0x0) type:speaker
+[   21.190237] snd_hda_codec_alc269 hdaudioC1D0:    speaker_outs=0 (0x0/0x0/0x0/0x0/0x0)
+[   21.190238] snd_hda_codec_alc269 hdaudioC1D0:    hp_outs=1 (0x21/0x0/0x0/0x0/0x0)
+[   21.190239] snd_hda_codec_alc269 hdaudioC1D0:    mono: mono_out=0x0
+[   21.190240] snd_hda_codec_alc269 hdaudioC1D0:    inputs:
+[   21.190241] snd_hda_codec_alc269 hdaudioC1D0:      Mic=0x19
+[   21.199149] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: format 3 timestamp 0x66300c2d
+[   21.199152] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: Mon 29 Apr 2024 22:07:57 GMT Daylight Time
+[   21.199837] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: format 3 timestamp 0x66300c2d
+[   21.199842] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: Mon 29 Apr 2024 22:07:57 GMT Daylight Time
+[   21.205456] hp_bioscfg: Prerequisites size value exceeded the maximum number of elements supported or data may be malformed
+[   21.211759] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: format 3 timestamp 0x66300c2d
+[   21.211763] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: Mon 29 Apr 2024 22:07:57 GMT Daylight Time
+[   21.235915] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: format 3 timestamp 0x66300c2d
+[   21.235919] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01.wmfw: Mon 29 Apr 2024 22:07:57 GMT Daylight Time
+[   21.270121] input: HD-Audio Generic Mic as /devices/pci0000:00/0000:00:08.1/0000:c3:00.6/sound/card1/input30
+[   21.270163] input: HD-Audio Generic Headphone as /devices/pci0000:00/0000:00:08.1/0000:c3:00.6/sound/card1/input31
+[   21.748104] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP1: Firmware: 1a00d6 vendor: 0x2 v3.11.18, 41 algorithms
+[   21.970110] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP1: Firmware: 1a00d6 vendor: 0x2 v3.11.18, 41 algorithms
+[   21.971085] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP1: Firmware: 1a00d6 vendor: 0x2 v3.11.18, 41 algorithms
+[   22.207159] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01-amp1.bin: v3.11.18
+[   22.207163] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP1: misc: C:\ProductSetting\HP\Chiron\Tuning_Relese\20250216\init\Left_Woofer (131118.360200.80216)-init.bin
+[   22.208146] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP1: Firmware: 1a00d6 vendor: 0x2 v3.11.18, 41 algorithms
+[   22.223293] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01-amp2.bin: v3.11.18
+[   22.223297] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP1: misc: C:\ProductSetting\HP\Chiron\Tuning_Relese\20250216\init\Left_Tweeter (131118.360300.80216)-init.bin
+[   22.249304] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01-amp3.bin: v3.11.18
+[   22.249308] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: DSP1: misc: C:\ProductSetting\HP\Chiron\Tuning_Relese\20250216\init\Right_Tweeter (131118.360100.80216)-init.bin
+[   22.286594] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP1: cirrus/cs35l54-b0-dsp1-misc-103c8d01-amp4.bin: v3.11.18
+[   22.286599] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: DSP1: misc: C:\ProductSetting\HP\Chiron\Tuning_Relese\20250216\init\Right_Woofer (131118.360000.80216)-init.bin
+[   22.368372] amdgpu: Virtual CRAT table created for CPU
+[   22.368419] amdgpu: Topology: Add CPU node
+[   22.368754] amdgpu 0000:c3:00.0: amdgpu: initializing kernel modesetting (IP DISCOVERY 0x1002:0x1586 0x103C:0x8D01 0xD1).
+[   22.369745] amdgpu 0000:c3:00.0: amdgpu: register mmio base: 0xA0300000
+[   22.369747] amdgpu 0000:c3:00.0: amdgpu: register mmio size: 1048576
+[   22.372919] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 0 <common_v1_0_0> (soc21_common)
+[   22.372926] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 1 <gmc_v11_0_0> (gmc_v11_0)
+[   22.372929] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 2 <ih_v6_0_0> (ih_v6_1)
+[   22.372931] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 3 <psp_v13_0_0> (psp)
+[   22.372934] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 4 <smu_v14_0_0> (smu)
+[   22.372936] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 5 <dce_v1_0_0> (dm)
+[   22.372938] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 6 <gfx_v11_0_0> (gfx_v11_0)
+[   22.372940] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 7 <sdma_v6_0_0> (sdma_v6_0)
+[   22.372943] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 8 <vcn_v4_0_5> (vcn_v4_0_5)
+[   22.372945] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 9 <jpeg_v4_0_5> (jpeg_v4_0_5)
+[   22.372946] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 10 <mes_v11_0_0> (mes_v11_0)
+[   22.372948] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 11 <vpe_v6_1_0> (vpe_v6_1)
+[   22.372950] amdgpu 0000:c3:00.0: amdgpu: detected ip block number 12 <isp_v4_1_1> (isp_ip)
+[   22.372978] amdgpu 0000:c3:00.0: amdgpu: Fetched VBIOS from VFCT
+[   22.372984] amdgpu: ATOM BIOS: 113-STRXLGEN-001
+[   22.391359] amdgpu 0000:c3:00.0: amdgpu: VPE: collaborate mode true
+[   22.420660] Console: switching to colour dummy device 80x25
+[   22.421276] amdgpu 0000:c3:00.0: amdgpu: Trusted Memory Zone (TMZ) feature disabled as experimental (default)
+[   22.421344] amdgpu 0000:c3:00.0: amdgpu: vm size is 262144 GB, 4 levels, block size is 9-bit, fragment size is 9-bit
+[   22.421374] amdgpu 0000:c3:00.0: amdgpu: VRAM: 16384M 0x0000008000000000 - 0x00000083FFFFFFFF (16384M used)
+[   22.421376] amdgpu 0000:c3:00.0: amdgpu: GART: 512M 0x00007FFF00000000 - 0x00007FFF1FFFFFFF
+[   22.421412] [drm] Detected VRAM RAM=16384M, BAR=16384M
+[   22.421415] [drm] RAM width 256bits LPDDR5
+[   22.421601] amdgpu 0000:c3:00.0: amdgpu: amdgpu: 16384M of VRAM memory ready
+[   22.421603] amdgpu 0000:c3:00.0: amdgpu: amdgpu: 73728M of GTT memory ready.
+[   22.421675] [drm] GART: num cpu pages 131072, num gpu pages 131072
+[   22.422293] [drm] PCIE GART of 512M enabled (table at 0x00000083FFB00000).
+[   22.422741] amdgpu 0000:c3:00.0: amdgpu: [drm] Loading DMUB firmware via PSP: version=0x09003E00
+[   22.423150] amdgpu 0000:c3:00.0: amdgpu: [VCN instance 0] Found VCN firmware Version ENC: 1.24 DEC: 9 VEP: 0 Revision: 16
+[   22.423190] amdgpu 0000:c3:00.0: amdgpu: [VCN instance 1] Found VCN firmware Version ENC: 1.24 DEC: 9 VEP: 0 Revision: 16
+[   22.447023] amdgpu 0000:c3:00.0: amdgpu: reserve 0x8c00000 from 0x83e0000000 for PSP TMR
+[   22.514792] Bluetooth: BNEP (Ethernet Emulation) ver 1.3
+[   22.514800] Bluetooth: BNEP socket layer initialized
+[   22.720625] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: Calibration applied
+[   22.720799] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Calibration applied
+[   22.721137] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Calibration applied
+[   22.722532] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: Tuning PID: 0x131118, SID: 0x360200, TID: 0x80216
+[   22.722739] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Tuning PID: 0x131118, SID: 0x360300, TID: 0x80216
+[   22.722915] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Calibration applied
+[   22.723103] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.2: Tuning PID: 0x131118, SID: 0x360100, TID: 0x80216
+[   22.724150] cs35l56-hda i2c-CSC3554:00-cs35l54-hda.3: Tuning PID: 0x131118, SID: 0x360000, TID: 0x80216
+[   22.895639] Bluetooth: hci0: Device setup in 1797911 usecs
+[   22.895647] Bluetooth: hci0: HCI Enhanced Setup Synchronous Connection command is advertised, but not supported.
+[   22.943098] tun: Universal TUN/TAP device driver, 1.6
+[   22.976033] Bluetooth: MGMT ver 1.23
+[   22.981148] NET: Registered PF_ALG protocol family
+[   23.043827] amdgpu 0000:c3:00.0: amdgpu: RAS: optional ras ta ucode is not available
+[   23.047927] amdgpu 0000:c3:00.0: amdgpu: RAP: optional rap ta ucode is not available
+[   23.047930] amdgpu 0000:c3:00.0: amdgpu: SECUREDISPLAY: optional securedisplay ta ucode is not available
+[   23.097790] amdgpu 0000:c3:00.0: amdgpu: SMU is initialized successfully!
+[   23.099829] amdgpu 0000:c3:00.0: amdgpu: [drm] Display Core v3.2.359 initialized on DCN 3.5.1
+[   23.099832] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-HDMI FRL PCON supported
+[   23.102484] amdgpu 0000:c3:00.0: amdgpu: [drm] DMUB hardware initialized: version=0x09003E00
+[   23.105818] snd_hda_intel 0000:c3:00.1: bound 0000:c3:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+[   23.155045] amdgpu 0000:c3:00.0: amdgpu: [drm] Using ACPI provided EDID for eDP-1
+[   23.156326] amdgpu 0000:c3:00.0: amdgpu: [drm] eDP-1: PSR support 1, DC PSR ver 0, sink PSR ver 4 DPCD caps 0x3a su_y_granularity 4
+[   23.156516] amdgpu 0000:c3:00.0: amdgpu: [drm] HDMI-A-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.156682] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-1: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.156818] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-2: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.156951] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-3: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.157036] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-4: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.157096] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-5: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.157159] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-6: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.157218] amdgpu 0000:c3:00.0: amdgpu: [drm] DP-7: PSR support 0, DC PSR ver -1, sink PSR ver 0 DPCD caps 0x0 su_y_granularity 0
+[   23.166974] kfd kfd: amdgpu: Allocated 3969056 bytes on gart
+[   23.166996] kfd kfd: amdgpu: Total number of KFD nodes to be created: 1
+[   23.167614] amdgpu: Virtual CRAT table created for GPU
+[   23.168742] amdgpu: Topology: Add dGPU node [0x1586:0x1002]
+[   23.168744] kfd kfd: amdgpu: added device 1002:1586
+[   23.168751] amdgpu 0000:c3:00.0: amdgpu: SE 2, SH per SE 2, CU per SH 10, active_cu_number 40
+[   23.168754] amdgpu 0000:c3:00.0: amdgpu: ring gfx_0.0.0 uses VM inv eng 0 on hub 0
+[   23.168755] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.0.0 uses VM inv eng 1 on hub 0
+[   23.168756] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.1.0 uses VM inv eng 4 on hub 0
+[   23.168756] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.2.0 uses VM inv eng 6 on hub 0
+[   23.168757] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.3.0 uses VM inv eng 7 on hub 0
+[   23.168757] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.0.1 uses VM inv eng 8 on hub 0
+[   23.168757] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.1.1 uses VM inv eng 9 on hub 0
+[   23.168758] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.2.1 uses VM inv eng 10 on hub 0
+[   23.168758] amdgpu 0000:c3:00.0: amdgpu: ring comp_1.3.1 uses VM inv eng 11 on hub 0
+[   23.168759] amdgpu 0000:c3:00.0: amdgpu: ring sdma0 uses VM inv eng 12 on hub 0
+[   23.168759] amdgpu 0000:c3:00.0: amdgpu: ring vcn_unified_0 uses VM inv eng 0 on hub 8
+[   23.168759] amdgpu 0000:c3:00.0: amdgpu: ring vcn_unified_1 uses VM inv eng 1 on hub 8
+[   23.168760] amdgpu 0000:c3:00.0: amdgpu: ring jpeg_dec_0 uses VM inv eng 4 on hub 8
+[   23.168760] amdgpu 0000:c3:00.0: amdgpu: ring jpeg_dec_1 uses VM inv eng 6 on hub 8
+[   23.168761] amdgpu 0000:c3:00.0: amdgpu: ring mes_kiq_3.1.0 uses VM inv eng 13 on hub 0
+[   23.168761] amdgpu 0000:c3:00.0: amdgpu: ring vpe uses VM inv eng 7 on hub 8
+[   23.171896] amdgpu 0000:c3:00.0: amdgpu: Runtime PM not available
+[   23.172413] amdgpu 0000:c3:00.0: amdgpu: [drm] Using custom brightness curve
+[   23.173592] amdgpu 0000:c3:00.0: [drm] Registered 4 planes with drm panic
+[   23.173593] [drm] Initialized amdgpu 3.64.0 for 0000:c3:00.0 on minor 1
+[   23.186384] fbcon: amdgpudrmfb (fb0) is primary device
+[   23.186751] [drm] pre_validate_dsc:1667 MST_DSC dsc precompute is not needed
+[   24.162145] Console: switching to colour frame buffer device 180x56
+[   24.171930] amdgpu 0000:c3:00.0: [drm] fb0: amdgpudrmfb frame buffer device
+[   25.137273] usb 3-2: USB disconnect, device number 2
+[   28.251027] Unknown laptop placement
+[   30.404361] hid-generic 0020:1022:0001.0007: hidraw0: SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd
+[   30.404725] hid-generic 0020:1022:0001.0008: hidraw1: SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd
+[   30.446759] hid-sensor-hub 0020:1022:0001.0007: hidraw0: SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd
+[   30.447155] hid-sensor-hub 0020:1022:0001.0008: hidraw1: SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd
+[   32.829158] fuse: init (API version 7.45)
+[   33.440024] Bluetooth: RFCOMM TTY layer initialized
+[   33.440036] Bluetooth: RFCOMM socket layer initialized
+[   33.440040] Bluetooth: RFCOMM ver 1.11
+
+# ---- crash, ~5 min in ----
+
+[  294.161633] [Poison overwritten] 0xffff89d7bd6e1030-0xffff89d7bd6e103f @offset=48. First byte 0xbc instead of 0x6b
+[  294.161746] =============================================================================
+[  294.161788] BUG anon_vma_chain (Not tainted): Object corrupt
+[  294.161819] -----------------------------------------------------------------------------
+[  294.161869] Slab 0xfffff5e844f5b840 objects=42 used=14 fp=0xffff89d7bd6e1d28 flags=0x17fffc000000200(workingset|node=0|zone=2|lastcpupid=0x1ffff)
+[  294.161931] Object 0xffff89d7bd6e1008 @offset=8 fp=0xffff89d7bd6e1d28
+[  294.161975] Redzone  ffff89d7bd6e1000: bb bb bb bb bb bb bb bb                          ........
+[  294.162018] Object   ffff89d7bd6e1008: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+[  294.162062] Object   ffff89d7bd6e1018: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+[  294.162108] Object   ffff89d7bd6e1028: 6b 6b 6b 6b 6b 6b 6b 6b bc 5e 06 d6 d2 37 1f 85  kkkkkkkk.^...7..
+[  294.162152] Object   ffff89d7bd6e1038: b5 0a 6b 50 35 9c 3b f4 6b 6b 6b 6b 6b 6b 6b a5  ..kP5.;.kkkkkkk.
+[  294.162198] Redzone  ffff89d7bd6e1048: bb bb bb bb bb bb bb bb                          ........
+[  294.162240] Padding  ffff89d7bd6e1058: 5a 5a 5a 5a 5a 5a 5a 5a                          ZZZZZZZZ
+[  294.162284] Disabling lock debugging due to kernel taint
+[  294.162299] ------------[ cut here ]------------
+[  294.162300] WARNING: mm/slub.c:1227 at object_err+0x1d7/0x1e5, CPU#22: wpctl/3588
+
+Modules linked in (modules-linked-in trimmed by line wraps in EFI dump,
+reassembled into one list):
+
+  rfcomm snd_seq_dummy snd_hrtimer snd_seq snd_seq_device fuse
+  hid_sensor_gyro_3d hid_sensor_prox hid_sensor_trigger
+  industrialio_triggered_buffer kfifo_buf hid_sensor_iio_common
+  industrialio hid_sensor_hub pinctrl_amdisp i2c_designware_amdisp
+  cmac algif_hash algif_skcipher af_alg tun bnep amdgpu
+  snd_acp_legacy_mach snd_acp_mach snd_soc_nau8821 snd_acp3x_rn
+  snd_acp70 snd_acp_i2s snd_acp_pdm snd_soc_dmic snd_acp_pcm
+  snd_sof_amd_acp70 snd_sof_amd_acp63 snd_sof_amd_vangogh
+  snd_sof_amd_rembrandt snd_sof_amd_renoir snd_sof_amd_acp
+  snd_sof_pci snd_sof_xtensa_dsp snd_sof snd_sof_utils snd_pci_ps
+  snd_soc_acpi_amd_match snd_ctl_led snd_amd_sdw_acpi soundwire_amd
+  soundwire_generic_allocation snd_hda_scodec_cs35l56_spi
+  soundwire_bus snd_hda_codec_alc269 regmap_spi mousedev joydev
+  snd_hda_scodec_component snd_soc_sdca mt7925_common
+  snd_hda_codec_realtek_lib snd_hda_codec_generic mt792x_lib
+  snd_hda_codec_atihdmi snd_hda_codec_hdmi mt76_connac_lib
+  snd_soc_core hp_bioscfg mt76 snd_hda_intel snd_compress
+  ac97_bus firmware_attributes_class snd_hda_codec snd_pcm_dmaengine
+  snd_rpl_pci_acp6x mac80211 amdxcp drm_panel_backlight_quirks
+  snd_hda_core btusb drm_buddy snd_acp_pci drm_exec
+  drm_suballoc_helper btrtl snd_intel_dspcfg spd5118
+  snd_amd_acpi_mach drm_ttm_helper btintel snd_intel_sdw_acpi
+  snd_acp_legacy_common snd_hda_scodec_cs35l56_i2c snd_pci_acp6x
+  hp_wmi ttm snd_hwdep btmtk sp5100_tco snd_hda_scodec_cs35l56
+  drm_display_helper btbcm snd_hda_cirrus_scodec watchdog
+  intel_rapl_msr hid_multitouch wmi_bmof xt_conntrack sparse_keymap
+  snd_pci_acp5x snd_pcm amdxdna cec snd_soc_cs35l56_shared cfg80211
+  snd_rn_pci_acp3x bluetooth snd_timer nf_conntrack i2c_piix4
+  snd_acp_config snd_soc_cs_amp_lib snd_soc_acpi i2c_algo_bit
+  ecdh_generic edac_mce_amd ecc edac_core amd_atl
+  ghash_clmulni_intel rapl amd_pmf ucsi_acpi cs_dsp efi_pstore
+  gpu_sched i2c_smbus k10temp video rtc_cmos snd snd_pci_acp3x
+  amdtee typec_ucsi soundcore crc16 i2c_hid_acpi evdev rfkill
+  amd_sfh roles nf_defrag_ipv6 i2c_hid serial_multi_instantiate
+  nf_defrag_ipv4 mac_hid typec libarc4 wireless_hotkey
+  platform_profile amd_isp4 amd_pmc battery wmi ac
+  tiny_power_button thermal button serio_raw ip6t_rpfilter
+  ipt_rpfilter xt_pkttype xt_LOG nf_log_syslog xt_tcpudp nft_compat
+  x_tables nf_tables sch_fq_codel kvm_amd ccp rng_core kvm loop
+  irqbypass nfnetlink efivarfs dmi_sysfs autofs4 crc32c_cryptoapi
+  dm_crypt encrypted_keys trusted asn1_encoder tee hid_generic
+  input_leds led_class atkbd libps2 vivaldi_fmap aesni_intel nvme
+  xhci_pci thunderbolt nvme_core xhci_hcd nvme_keyring nvme_auth
+  hkdf i8042 serio vfat fat usbhid hid nls_iso8859_1 nls_cp437
+  dm_snapshot dm_bufio dm_mod btrfs blake2b libblake2b xor
+  raid6_pq
+
+  → mt7925e is NOT in this list (blacklist took)
+  → amdxdna IS loaded
+  → amd_isp4, pinctrl_amdisp, i2c_designware_amdisp are all loaded
+  → amd_pmf is loaded
+  → amdgpu is loaded
+  → tun is loaded (PipeWire/wireplumber didn't drag it in; was probably
+    loaded earlier for tailscale, even with WiFi off)
+
+CPU: 22 UID: 1000 PID: 3588 Comm: wpctl Tainted: G    B               6.19.10 #1-NixOS PREEMPT(lazy)
+Hardware name: HP HP ZBook Ultra G1a 14 inch Mobile Workstation PC/8D01, BIOS X89 Ver. 01.03.02 06/18/2025
+
+Call Trace:
+  object_err+0x1d7/0x1e5
+  check_bytes_and_report.cold+0x4d/0x6b
+  check_object+0x2b8/0x3b0
+  alloc_debug_processing+0xa6/0x100
+  get_partial_node+0x198/0x300
+  ___slab_alloc+0x5bf/0xdc0
+  __slab_alloc.isra.0+0x2b/0x60
+  kmem_cache_alloc_noprof+0x2e0/0x610
+  anon_vma_clone+0x7b/0x250
+  __split_vma+0x15f/0x300
+  vma_modify+0x5c7/0x6b0
+  vma_modify_flags+0xa4/0xe0
+  mprotect_fixup+0xb6/0x370
+  do_mprotect_pkey+0x2d4/0x540
+  __x64_sys_mprotect+0x1f/0x30
+  do_syscall_64+0xb6/0x560
+  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+
+Userspace RIP: 0x7f14c1a5733b → glibc mprotect()
+
+Kernel panic - not syncing: kernel: panic_on_warn set ...
+[  295.674641] Shutting down cpus with NMI
