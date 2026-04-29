@@ -1,0 +1,533 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/Projects/nixos-config/main
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ Take a look at help-sessions/README.md. This is the start of a new help       
+  session. Get setup, and then I will share the results of my actions after the 
+   previous session                                                             
+
+  Read 3 files, listed 2 directories (ctrl+o to expand)
+
+● I've read the previous session's findings and actions. Let me set up the new
+  session directory.
+
+● Bash(date -u +"%Y-%m-%dT%H%M%SZ")
+  ⎿  2026-04-29T095446Z
+
+● Bash(mkdir -p /home/nullcopy/Projects/nixos-config/main/help-sessions/help-ses
+      sion-2026-04-29T095446Z)
+  ⎿  Done
+
+● Setup complete. I'm caught up on the prior session:
+
+  Where we left off:
+  - wisp is crashing with SLUB freelist corruption on skbuff_head_cache, RIP
+  kmem_cache_free+0x406. Three identical oopses, Chrome AF_UNIX read path
+  tripping it. TTY crashes in 5–15 min, DE stays up for days — likely tied to
+  s2idle resume cycles.
+  - You added diagnostic boot.kernelParams: consoleblank=0, slub_debug=FZP,
+  slab_nomerge, panic_on_warn=1.
+  - You were going to rebuild, reboot, sit in TTY ≥30 min, and report back with
+  either a new pstore oops or a clean uptime.
+
+  New session dir is ready at help-sessions/help-session-2026-04-29T095446Z/. Go
+   ahead — what happened?
+
+✻ Sautéed for 30s
+
+❯ Ok, I did as instructed: rebuild+switch, reboot, drop into TTY. I logged in.  
+  I was not idle, but did cd around like I was working. After ~5m the system    
+  hung with no visible panic message                                            
+
+● Even a silent hang may have left a pstore record (slub_debug=FZP trips at the
+  bad write, which is earlier than any visible oops). Please run:
+
+  sudo ls -1t /var/lib/systemd/pstore/
+  sudo journalctl -k -b -1 --no-pager | tail -200
+
+  Then paste the output. Specifically I want:
+  1. Whether any new dmesg-* files exist in pstore from the hang.
+  2. The tail of the previous boot's kernel log — if the panic fired but the
+  framebuffer was already dead, the message will still be in the journal from
+  the previous boot.
+
+  If pstore is empty and the previous-boot journal ends cleanly with no oops,
+  that points away from SLUB corruption and toward a hard hardware/firmware
+  lockup — different remediation path (firmware/driver bisect, not memory
+  debug).
+
+❯    sudo ls -1t /var/lib/systemd/pstore/                                      
+                                                                                
+  1777458629                                                                    
+  1777458630                                                                    
+  1777456197                                                                    
+  1777451130                                                                    
+  1777451131                                                                    
+  1777451132                                                                    
+  1777451137                                                                    
+  1777451138                                                                    
+  1776115206                                                                    
+  1776115207                                                                    
+  1775675321                                                                    
+  1775672489                                                                    
+  1775672763                                                                    
+  1775672764                                                                    
+  1775674882                                                                    
+  1775674883                                                                    
+  1775538829                                                                    
+  1775540025                                                                    
+  1775540026                                                                    
+  1775506322                                                                    
+  1775506323                                                                    
+  1775507190                                                                    
+  1775507191                                                                    
+  1775507192                                                                    
+  1775504187                                                                    
+  1775501485                                                                    
+  1775501486                                                                    
+  1775365236                                                                    
+  1775365237                                                                    
+  1775365548                                                                    
+  1775366878                                                                    
+  1775366879                                                                    
+  1775363041                                                                    
+  1775361964                                                                    
+  1775361965                                                                    
+  1775361528                                                                    
+  1775361529                                                                    
+  1775361278                                                                    
+  1775361279                                                                    
+  1774837791                                                                    
+  1774837792                                                                    
+                                                                                
+     sudo journalctl -k -b -1 --no-pager | tail -200                           
+                                                                                
+  Apr 29 05:24:52 wisp kernel: Bluetooth: HCI device and connection manager     
+  initialized                                                                   
+  Apr 29 05:24:52 wisp kernel: Bluetooth: HCI socket layer initialized          
+  Apr 29 05:24:52 wisp kernel: Bluetooth: L2CAP socket layer initialized        
+  Apr 29 05:24:52 wisp kernel: Bluetooth: SCO socket layer initialized          
+  Apr 29 05:24:52 wisp kernel: EDAC MC: Ver: 3.0.0                              
+  Apr 29 05:24:52 wisp kernel: intel_rapl_common: Found RAPL domain package     
+  Apr 29 05:24:52 wisp kernel: intel_rapl_common: Found RAPL domain core        
+  Apr 29 05:24:52 wisp kernel: input: PMF-TA output events as                   
+  /devices/platform/AMDI0105:00/input/input17                                   
+  Apr 29 05:24:52 wisp kernel: amd-pmf AMDI0105:00: registered PMF device       
+  successfully                                                                  
+  Apr 29 05:24:52 wisp kernel: MCE: In-kernel MCE decoding enabled.             
+  Apr 29 05:24:52 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: Cirrus 
+   Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)                               
+  Apr 29 05:24:52 wisp kernel: hp_wmi: query 0x4 returned error 0x5             
+  Apr 29 05:24:52 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.0: DSP    
+  system name: '103C8D01', amp name: 'AMP1'                                     
+  Apr 29 05:24:52 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Reset  
+  GPIO busy, assume shared reset                                                
+  Apr 29 05:24:52 wisp kernel: input: HP WMI hotkeys as                         
+  /devices/virtual/input/input18                                                
+  Apr 29 05:24:52 wisp kernel: usbcore: registered new interface driver btusb   
+  Apr 29 05:24:52 wisp kernel: snd_acp_pci 0000:c3:00.5: enabling device (0000  
+  -> 0002)                                                                      
+  Apr 29 05:24:52 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: Cirrus 
+   Logic CS35L54 Rev B0 OTP4 fw:3.4.4 (patched=0)                               
+  Apr 29 05:24:52 wisp kernel: Bluetooth: hci0: HW/SW Version: 0x00000000,      
+  Build Time: 20260106153314                                                    
+  Apr 29 05:24:52 wisp kernel: snd_hda_intel 0000:c3:00.1: enabling device      
+  (0000 -> 0002)                                                                
+  Apr 29 05:24:52 wisp kernel: snd_hda_intel 0000:c3:00.6: enabling device      
+  (0000 -> 0002)                                                                
+  Apr 29 05:24:52 wisp kernel: cs35l56-hda i2c-CSC3554:00-cs35l54-hda.1: DSP    
+  system name: '103C8D01', amp name: 'AMP2'                                     
+  Apr 29 05:24:52 wisp kernel:                                                  
+  ──── (150 lines hidden) ───────────────────────────────────────────────────── 
+  mdgpu 0000:c3:00.0: amdgpu: ring jpeg_dec_1 uses VM inv eng 6 on hub 8        
+  Apr 29 05:24:54 wisp kernel: amdgpu 0000:c3:00.0: amdgpu: ring mes_kiq_3.1.0  
+  uses VM inv eng 13 on hub 0                                                   
+  Apr 29 05:24:54 wisp kernel: amdgpu 0000:c3:00.0: amdgpu: ring vpe uses VM    
+  inv eng 7 on hub 8                                                            
+  Apr 29 05:24:54 wisp kernel: amdgpu 0000:c3:00.0: amdgpu: Runtime PM not      
+  available                                                                     
+  Apr 29 05:24:54 wisp kernel: amdgpu 0000:c3:00.0: amdgpu: [drm] Using custom  
+  brightness curve                                                              
+  Apr 29 05:24:54 wisp kernel: amdgpu 0000:c3:00.0: [drm] Registered 4 planes   
+  with drm panic                                                                
+  Apr 29 05:24:54 wisp kernel: [drm] Initialized amdgpu 3.64.0 for 0000:c3:00.0 
+   on minor 1                                                                   
+  Apr 29 05:24:54 wisp kernel: fbcon: amdgpudrmfb (fb0) is primary device       
+  Apr 29 05:24:54 wisp kernel: [drm] pre_validate_dsc:1667 MST_DSC dsc          
+  precompute is not needed                                                      
+  Apr 29 05:24:54 wisp kernel: tun: Universal TUN/TAP device driver, 1.6        
+  Apr 29 05:24:55 wisp kernel: Console: switching to colour frame buffer device 
+   180x56                                                                       
+  Apr 29 05:24:55 wisp kernel: amdgpu 0000:c3:00.0: [drm] fb0: amdgpudrmfb      
+  frame buffer device                                                           
+  Apr 29 05:24:57 wisp kernel: wlp193s0: authenticate with 62:a4:b7:5c:51:d3    
+  (local address=8c:8b:5b:0e:8c:8b)                                             
+  Apr 29 05:24:58 wisp kernel: wlp193s0: send auth to 62:a4:b7:5c:51:d3 (try    
+  1/3)                                                                          
+  Apr 29 05:24:58 wisp kernel: wlp193s0: authenticated                          
+  Apr 29 05:24:58 wisp kernel: wlp193s0: associate with 62:a4:b7:5c:51:d3 (try  
+  1/3)                                                                          
+  Apr 29 05:24:58 wisp kernel: wlp193s0: RX AssocResp from 62:a4:b7:5c:51:d3    
+  (capab=0x1011 status=0 aid=19)                                                
+  Apr 29 05:24:58 wisp kernel: wlp193s0: associated                             
+  Apr 29 05:24:58 wisp kernel: wlp193s0: Limiting TX power to 30 (30 - 0) dBm   
+  as advertised by 62:a4:b7:5c:51:d3                                            
+  Apr 29 05:25:00 wisp kernel: Unknown laptop placement                         
+  Apr 29 05:25:02 wisp kernel: hid-generic 0020:1022:0001.0007: hidraw2: SENSOR 
+   HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd                  
+  Apr 29 05:25:02 wisp kernel: hid-generic 0020:1022:0001.0008: hidraw3: SENSOR 
+   HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd                  
+  Apr 29 05:25:02 wisp kernel: hid-sensor-hub 0020:1022:0001.0007: hidraw2:     
+  SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd            
+  Apr 29 05:25:02 wisp kernel: hid-sensor-hub 0020:1022:0001.0008: hidraw3:     
+  SENSOR HUB HID v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd            
+  Apr 29 05:25:06 wisp kernel: fuse: init (API version 7.45)                    
+  Apr 29 05:25:07 wisp kernel: Bluetooth: RFCOMM TTY layer initialized          
+  Apr 29 05:25:07 wisp kernel: Bluetooth: RFCOMM socket layer initialized       
+  Apr 29 05:25:07 wisp kernel: Bluetooth: RFCOMM ver 1.11                       
+
+● The tail -200 only shows kernel messages from boot startup (~05:24:52 →
+  05:25:07), then nothing until the hang. That means: no oops, no slub_debug=FZP
+   complaint, no panic_on_warn panic was ever printed to the journal. A silent
+  hang despite those debug knobs is itself a strong signal — but pstore is the
+  tiebreaker since it can capture a panic that never made it to disk.
+
+  Need to know exactly which pstore entries are new from this hang. Please run:
+
+  ls -1t /var/lib/systemd/pstore/ | head -3 \
+    | xargs -I{} sudo ls -la --time-style=full-iso /var/lib/systemd/pstore/{}
+  sudo find /var/lib/systemd/pstore -newer \
+    /home/nullcopy/Projects/nixos-config/main/help-sessions/help-session-2026-04
+  -29T090255Z/actions.md \
+    -printf '%T+  %p\n' | sort
+
+  Goal: confirm whether 1777458629 / 1777458630 (and the few above them) are new
+   from this boot, and what filename / type they actually are (dmesg-erst,
+  dmesg-efi, or something else). If any new dmesg.txt exists, paste it.
+
+  If no new pstore entry was written for this hang, that's the diagnostic answer
+   — and it changes the model. panic_on_warn=1 + slub_debug=FZP should produce
+  an oops before the system locks if SLUB corruption were the cause. A truly
+  silent freeze with neither pstore nor journal evidence points to a CPU/SoC
+  firmware lockup (likely SMU / amd_pmc / s2idle path), not freelist corruption.
+   The next step in that branch is to enable hard-lockup detection so we get an
+  NMI traceback the next time:
+
+  - nmi_watchdog=1, softlockup_panic=1, hardlockup_panic=1 in kernelParams,
+  - and pull pstore into ramoops as a backup capture path.
+
+  Hold on changing the config until we confirm the pstore situation — don't want
+   to layer changes on top of an unread signal.
+
+✻ Baked for 1m 21s
+
+❯    ls -1t /var/lib/systemd/pstore/ | head -3 \                               
+      | xargs -I{} sudo ls -la --time-style=full-iso /var/lib/systemd/pstore/{} 
+  total 0                                                                       
+  drwxr-xr-x 1 root root   6 2026-04-29 05:31:42.989065191 -0500 .              
+  drwxr-xr-x 1 root root 820 2026-04-29 05:31:42.988000006 -0500 ..             
+  drwxr-xr-x 1 root root 146 2026-04-29 05:31:42.999871549 -0500 001            
+  total 0                                                                       
+  drwxr-xr-x 1 root root    6 2026-04-29 05:31:42.794643833 -0500 .             
+  drwxr-xr-x 1 root root  820 2026-04-29 05:31:42.988000006 -0500 ..            
+  drwxr-xr-x 1 root root 1170 2026-04-29 05:31:42.978028641 -0500 001           
+  total 0                                                                       
+  drwxr-xr-x 1 root root    6 2026-04-29 04:50:54.818607357 -0500 .             
+  drwxr-xr-x 1 root root  820 2026-04-29 05:31:42.988000006 -0500 ..            
+  drwxr-xr-x 1 root root 2642 2026-04-29 04:50:55.181031394 -0500 001           
+                                                                                
+     sudo find /var/lib/systemd/pstore -newer \                                
+      /home/nullcopy/Projects/nixos-config/main/help-sessions/help-session-2026 
+  -04-29T090255Z/actions.md \                                                   
+      -printf '%T+  %p\n' | sort                                                
+  find: ‘/home/nullcopy/Projects/nixos-config/main/help-sessions/help-session-2 
+  026-04-29T090255Z/actions.md’: No such file or directory                      
+
+● Two new pstore captures from this hang (05:31:42 -0500 = ~10:31 UTC, right
+  after the boot at 10:24 UTC + ~5 min hang + ~1 min reboot to extraction). The
+  pstore entries are directories — I need to see what's inside. The find command
+   failed because that path doesn't exist on wisp; ignore it.
+
+  Run:
+
+  sudo ls -laR /var/lib/systemd/pstore/1777458629
+  /var/lib/systemd/pstore/1777458630 /var/lib/systemd/pstore/1777456197
+  sudo grep -El '.' /var/lib/systemd/pstore/1777458629/001/*
+  /var/lib/systemd/pstore/1777458630/001/* 2>/dev/null
+  sudo cat /var/lib/systemd/pstore/1777458629/001/dmesg.txt 2>/dev/null \
+         /var/lib/systemd/pstore/1777458630/001/dmesg.txt 2>/dev/null
+
+  Also worth grabbing: any Oops_* or Panic_* files, plus the EFI/ERST raw
+  records.
+
+  sudo find /var/lib/systemd/pstore/1777458629
+  /var/lib/systemd/pstore/1777458630 -type f -printf '%p  (%s bytes)\n'
+
+  Paste all of that. The presence/absence and content of dmesg.txt is the
+  diagnostic — empty or missing dmesg.txt means the kernel never produced a
+  panic message (hard lockup), which flips us off the SLUB corruption track
+  entirely.
+
+✻ Crunched for 44s
+
+❯  sudo ls -laR /var/lib/systemd/pstore/1777458629                             
+  /var/lib/systemd/pstore/1777458630 /var/lib/systemd/pstore/1777456197         
+  /var/lib/systemd/pstore/1777456197:                                           
+  total 0                                                                       
+  drwxr-xr-x 1 root root    6 Apr 29 04:50 .                                    
+  drwxr-xr-x 1 root root  820 Apr 29 05:31 ..                                   
+  drwxr-xr-x 1 root root 2642 Apr 29 04:50 001                                  
+                                                                                
+  /var/lib/systemd/pstore/1777456197/001:                                       
+  total 232                                                                     
+  drwxr-xr-x 1 root root  2642 Apr 29 04:50 .                                   
+  drwxr-xr-x 1 root root     6 Apr 29 04:50 ..                                  
+  -rw------- 1 root root  1672 Apr 29 04:49 dmesg-efi_pstore-177745619701001    
+  -rw------- 1 root root  1668 Apr 29 04:49 dmesg-efi_pstore-177745619702001    
+  -rw------- 1 root root  1703 Apr 29 04:49 dmesg-efi_pstore-177745619703001    
+  -rw------- 1 root root  1656 Apr 29 04:49 dmesg-efi_pstore-177745619704001    
+  -rw------- 1 root root  1131 Apr 29 04:49 dmesg-efi_pstore-177745619705001    
+  -rw------- 1 root root  1052 Apr 29 04:49 dmesg-efi_pstore-177745619706001    
+  -rw------- 1 root root  1702 Apr 29 04:49 dmesg-efi_pstore-177745619707001    
+  -rw------- 1 root root  1679 Apr 29 04:49 dmesg-efi_pstore-177745619708001    
+  -rw------- 1 root root  1679 Apr 29 04:49 dmesg-efi_pstore-177745619709001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619710001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619711001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619712001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619713001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619714001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619715001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619716001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619717001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619718001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619719001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619720001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619721001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619722001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619723001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619724001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619725001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619726001    
+  -rw------- 1 root root  1680 Apr 29 04:49 dmesg-efi_pstore-177745619727001    
+  -rw------- 1 root root  1680 Apr 29 04:                                       
+  ──── (424 lines hidden) ───────────────────────────────────────────────────── 
+  6/18/2025                                                                     
+  <4>[  354.915910] Call Trace:                                                 
+  <4>[  354.915914]  <TASK>                                                     
+  <4>[  354.915915]  dump_stack_lvl+0x5d/0x80                                   
+  <4>[  354.915923]  ? object_err+0x1c0/0x1e5                                   
+  <4>[  354.915926]  vpanic+0xdb/0x2d0                                          
+  <4>[  354.915932]  ? object_err+0x1d7/0x1e5                                   
+  <4>[  354.915935]  panic+0x6b/0x6b                                            
+  <4>[  354.915939]  check_panic_on_warn.cold+0xf/0x1e                          
+  <4>[  354.915942]  __warn.cold+0xb4/0x109                                     
+  <4>[  354.915946]  ? object_err+0x1d7/0x1e5                                   
+  <4>[  354.915949]  __report_bug+0x96/0x100                                    
+  <4>[  354.915958]  report_bug+0x2b/0x80                                       
+  <4>[  354.915961]  handle_bug+0x182/0x300                                     
+                                                                                
+     sudo find /var/lib/systemd/pstore/1777458629                              
+  /var/lib/systemd/pstore/1777458630 -type f -printf '%p  (%s bytes)\n'         
+                                                                                
+  /var/lib/systemd/pstore/1777458629/001/dmesg-efi_pstore-177745862902001       
+  (1671 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458629/001/dmesg.txt  (3354 bytes)                
+  /var/lib/systemd/pstore/1777458629/001/dmesg-efi_pstore-177745862901001       
+  (1683 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863020001       
+  (1667 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg.txt  (27913 bytes)               
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863019001       
+  (1616 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863018001       
+  (1686 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863017001       
+  (1678 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863016001       
+  (1651 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863015001       
+  (1635 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863014001       
+  (1618 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863013001       
+  (1639 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863012001       
+  (1606 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863011001       
+  (1680 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863010001       
+  (1680 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863009001       
+  (1679 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863008001       
+  (1685 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863007001       
+  (1051 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863006001  (808 
+   bytes)                                                                       
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863005001       
+  (1151 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863004001       
+  (1687 bytes)                                                                  
+  /var/lib/systemd/pstore/1777458630/001/dmesg-efi_pstore-177745863003001       
+  (1696 bytes)                                                                  
+
+● This is the smoking gun. Confirmed diagnosis:
+
+  - Cache: skbuff_small_head (not skbuff_head_cache — that was a merged alias;
+  slab_nomerge revealed the actual cache).
+  - Type: classic write-after-free. Object at 0xffff8b15dc6886c0 was freed
+  (poison 0x6b filled the whole body) — except offset 0–7 was overwritten with
+  68 0d 23 a9 fa 08 8d 1a (a kernel pointer-shaped value: 0x1a8d08fa a9230d68).
+  Some path freed the SKB head and then wrote a pointer back into byte 0.
+  - Detection path is just the next consumer (__tcp_send_ack from tailscale's
+  TUN write); producer is invisible by design — slub_debug=FZP only validates at
+   next allocation, not at the bad write.
+  - Crash time: 354 s after boot. No s2idle cycle this run (user was actively at
+   the keyboard). That falsifies the s2idle-only theory — corruption happens
+  during plain normal operation.
+
+  The drivers in the consumer stack and recently loaded ones that touch SKBs
+  are: mt7925e (WiFi 7), tun (legit, kernel core), amdxdna, amd_isp4, amd_pmf.
+  WiFi drivers handle SKB lifecycle constantly and mt7925e on Strix Halo is the
+  youngest/least-tested. Best first bisect target.
+
+  Action — driver bisect, round 1: blacklist mt7925e
+
+  Edit hosts/wisp/configuration.nix. Add:
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(sed -n '1,80p'
+      /home/nullcopy/Projects/nixos-config/main/hosts/wisp/configuration.nix)
+  ⎿  {
+       config,
+       lib,
+     … +34 lines (ctrl+o to expand)
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 3 lines, removed 2 lines
+      19    boot.kernelPackages = pkgs.linuxPackages_latest;
+      20  
+      21    # Crash triage — see ./crash-triage.md.
+      22 -  # Diagnoses suspected SLUB freelist corruption around s2idle 
+         -resume.                                                        
+      23 -  # Remove once the underlying driver bug is identified or a wo
+         -rkaround lands.                                                
+      22 +  # Confirmed: write-after-free on skbuff_small_head, producer 
+         +unknown.                                                       
+      23 +  # Bisecting candidate drivers; remove once the producer is id
+         +entified.                                                      
+      24    boot.kernelParams = [
+      25      "consoleblank=0"
+      26      "slub_debug=FZP"
+      27      "slab_nomerge"
+      28      "panic_on_warn=1"
+      29 +    "module_blacklist=mt7925e" # bisect round 1: WiFi 7 driver 
+      30    ];
+      31  
+      32    ## ----- hardware -------------------------------------------
+          -----------------
+
+● Now archive the new oops into the session and update findings/actions.
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Now persist the new oops and update session docs.
+
+● Write(help-sessions/help-session-2026-04-29T095446Z/oops-2026-04-29T1030Z.txt)
+  ⎿  Wrote 145 lines to help-sessions/help-session-2026-04-29T095446Z/oops-
+     2026-04-29T1030Z.txt
+       2 # Pstore capture — 2026-04-29 ~10:30 UTC (boot uptime t=354s)
+       3 # Source: /var/lib/systemd/pstore/1777458630/001/dmesg.txt (the 
+       4 # captures from this hang — 27913 bytes, contains the full reass
+         embled panic
+       5 # split across 20 EFI variable slots).
+       7 # Full dmesg.txt content reproduced below verbatim from `sudo ca
+         t`.
+         ers.e "Panic#1 PartN" lines are systemd-pstore's reassembly mark
+       9 
+      10 Panic#1 Part2
+     … +182 lines (ctrl+o to expand)
+● Write(help-sessions/help-session-2026-04-29T095446Z/findings.md)
+  ⎿  Wrote 82 lines to
+     help-sessions/help-session-2026-04-29T095446Z/findings.md
+       2 # Help session findings — round 2
+       3 Continuation of crash triage on wisp (HP ZBook Ultra G1a / Strix
+       4 First session: `../help-session-2026-04-29T090255Z/findings.md`.
+       5 
+       6 ## Where round 1 left off
+       8 Three identical oopses on `kmem_cache_free` of (apparent) `skbuf
+         f_head_cache`,
+         ion around2idle resume, in TTY. Diagnosis: SLUB freelist corrupt
+      10 s2idle resume. Action: added `consoleblank=0 slub_debug=FZP slab
+         _nomerge
+     … +101 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-29T095446Z/actions.md)
+  ⎿  Wrote 78 lines to
+     help-sessions/help-session-2026-04-29T095446Z/actions.md
+       2 # actions — wisp crash triage, round 2
+       3 ## Done this session (2026-04-29)
+       4 
+       5 - Captured the post-`slub_debug=FZP` panic into
+       6   `oops-2026-04-29T1030Z.txt`. Confirms write-after-free on
+         ).`skbuff_small_head` (slab_nomerge unmasked the real cache name
+       8   Producer not visible from this oops; consumer was tailscaled →
+       9   TUN → `__tcp_send_ack` → `__alloc_skb`. Crash happened *withou
+         t*
+      10   s2idle this time — falsifies the "s2idle-only trigger" theory.
+     … +74 lines (ctrl+o to expand)
+
+● Done. Summary of changes:
+
+  Diagnosis upgraded: Confirmed write-after-free on skbuff_small_head (the
+  slab_nomerge unmasked the real cache — round 1's skbuff_head_cache was a
+  merged alias). 16 bytes of pointer-shaped garbage written into a freed object
+  body, redzones intact. panic_on_warn=1 worked perfectly — the panic flushed to
+   pstore in 20 EFI variable slots. The crash hit without an s2idle cycle, which
+   falsifies "s2idle-only trigger." Producer is invisible from this oops by
+  design (slub_debug=FZP only validates at next allocation, not at the bad
+  write).
+
+  Code change: added module_blacklist=mt7925e to hosts/wisp/configuration.nix:29
+   — round 1 of the driver bisect. WiFi 7 is the highest-probability producer
+  (newest Strix Halo driver, in active SKB churn during the crash).
+
+  Session docs: wrote oops-2026-04-29T1030Z.txt, findings.md, actions.md in the
+  new session dir. findings.md captures the cache rename, the corruption
+  pattern, the suspect ranking, and the updated plan. actions.md tells you
+  exactly what to run before the next chat.
+
+  Your next step: nixos-rebuild switch --flake .#wisp && reboot, confirm mt7925e
+   is gone (lsmod | grep mt7925, ip link), then soak in TTY for ≥30 min with
+  WiFi disabled (use ethernet or go offline). Clean run = mt7925e confirmed; new
+   crash = move to amdxdna.
+
+✻ Crunched for 4m 10s
+
+❯ Ok, have you wrapped up this help session. I'm ready to close, and I'll start 
+   a new one                                                                    
+
+● Per help-sessions/README.md, the close-out steps are:
+
+  1. /export the chat → save verbatim to
+  help-sessions/help-session-2026-04-29T095446Z/chat.log. (You run this — I
+  can't dump the conversation.)
+  2. Findings doc — already written: findings.md. ✓
+  3. actions.md — already written. ✓
+  4. Commit.
+
+  What's still on your plate before close:
+
+  - Run /export and save to chat.log in the session dir.
+  - Then commit. Suggested:
+
+  git add help-sessions/help-session-2026-04-29T095446Z/ \
+          hosts/wisp/configuration.nix
+  git commit -m "Help session 2 — confirm skbuff_small_head WAF, bisect mt7925e"
+
+  Want me to run the commit once you've dropped chat.log in?

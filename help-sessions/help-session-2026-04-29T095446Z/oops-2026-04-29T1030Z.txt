@@ -1,0 +1,145 @@
+# Pstore capture — 2026-04-29 ~10:30 UTC (boot uptime t=354s)
+#
+# Source: /var/lib/systemd/pstore/1777458630/001/dmesg.txt (the longer of two
+# captures from this hang — 27913 bytes, contains the full reassembled panic
+# split across 20 EFI variable slots).
+#
+# Full dmesg.txt content reproduced below verbatim from `sudo cat`.
+# The "Panic#1 PartN" lines are systemd-pstore's reassembly markers.
+
+Panic#1 Part2
+<4>[  354.915966]  ? object_err+0x1d7/0x1e5
+<4>[  354.915969]  exc_invalid_op+0x18/0x70
+<4>[  354.915972]  asm_exc_invalid_op+0x1a/0x20
+<4>[  354.915975] RIP: 0010:object_err+0x1d7/0x1e5
+<4>[  354.915978] Code: 29 c1 48 8d 54 05 00 48 c7 c6 05 ae 2e bd 48 c7 c7 4a 26 2d bd e8 f9 fa ff ff be 01 00 00 00 bf 05 00 00 00 e8 6a 00 10 00 90 <0f> 0b 90 5b 5d 41 5c 41 5d c3 cc cc cc cc 49 89 d4 45 0f b6 0a 53
+<4>[  354.915982] RSP: 0018:ffffd23b0223f868 EFLAGS: 00010096
+<4>[  354.915984] RAX: 0000000000000000 RBX: ffff8b15cf6907c0 RCX: 0000000000000027
+<4>[  354.915986] RDX: 0000000000000005 RSI: 0000000000000001 RDI: ffff8b30cd31ea00
+<4>[  354.915988] RBP: ffff8b15dc6886c0 R08: 0000000000000000 R09: 00000000ffffdfff
+<4>[  354.915990] R10: ffffffffbda613a0 R11: ffffd23b0223f708 R12: ffff8b15dc688000
+<4>[  354.915991] R13: fffffa1c0471a200 R14: ffff8b15cf6907c0 R15: fffffa1c0471a200
+<4>[  354.915994]  ? object_err+0x1d6/0x1e5
+<4>[  354.915997]  check_bytes_and_report.cold+0x4d/0x6b
+<4>[  354.916001]  check_object+0x2b8/0x3b0
+<4>[  354.916004]  alloc_debug_processing+0xa6/0x100
+<4>[  354.916006]  get_partial_node+0x198/0x300
+<4>[  354.916009]  ___slab_alloc+0x5bf/0xdc0
+<4>[  354.916011]  ? kmalloc_reserve+0xf5/0x210
+<4>[  354.916015]  ? __alloc_skb+0xa5/0x230
+<4>[  354.916017]  __slab_alloc.isra.0+0x2b/0x60
+<4>[  354.916019]  kmem_cache_alloc_node_noprof+0x39c/0x620
+<4>[  354.916022]  kmalloc_reserve+0xf5/0x210
+<4>[  354.916025]  __alloc_skb+0xd9/0x230
+<4>[  354.916027]  __tcp_send_ack.part.0+0x34/0x180
+<4>[  354.916030]  tcp_v4_do_rcv+0x164/0x2b0
+<4>[  354.916033]  tcp_v4_rcv+0xe46/0x13e0
+<4>[  354.916036]  ? raw_local_deliver+0xd0/0x2d0
+
+Panic#1 Part1
+<4>[  354.916039]  ip_protocol_deliver_rcu+0x2c/0x170
+<4>[  354.916042]  ip_local_deliver_finish+0x85/0x100
+<4>[  354.916045]  __netif_receive_skb_one_core+0x85/0xa0
+<4>[  354.916048]  netif_receive_skb+0x37/0x160
+<4>[  354.916051]  ? tun_get_user+0xa56/0x1260 [tun]
+<4>[  354.916053]  tun_get_user+0xbcf/0x1260 [tun]
+<4>[  354.916057]  ? tun_chr_write_iter+0x77/0xc0 [tun]
+<4>[  354.916059]  ? rw_verify_area+0x56/0x180
+<4>[  354.916062]  tun_chr_write_iter+0x77/0xc0 [tun]
+<4>[  354.916064]  vfs_write+0x260/0x480
+<4>[  354.916068]  ksys_write+0x73/0xf0
+<4>[  354.916071]  do_syscall_64+0xb6/0x560
+<4>[  354.916073]  ? __irq_exit_rcu+0x4c/0xf0
+<4>[  354.916076]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+<4>[  354.916078] RIP: 0033:0x40d00e
+<4>[  354.916081] Code: ff cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc cc 49 89 f2 48 89 fa 48 89 ce 48 89 df 0f 05 <48> 3d 01 f0 ff ff 76 15 48 f7 d8 48 89 c1 48 c7 c0 ff ff ff ff 48
+<4>[  354.916084] RSP: 002b:000021cab18099f8 EFLAGS: 00000206 ORIG_RAX: 0000000000000001
+<4>[  354.916086] RAX: ffffffffffffffda RBX: 000000000000000d RCX: 000000000040d00e
+<4>[  354.916088] RDX: 000000000000050a RSI: 000021cab23c0006 RDI: 000000000000000d
+<4>[  354.916090] RBP: 000021cab1809a38 R08: 0000000000000000 R09: 0000000000000000
+<4>[  354.916092] R10: 0000000000000000 R11: 0000000000000206 R12: 000021cab1809b68
+<4>[  354.916093] R13: 000021cab458a008 R14: 000021cab42da780 R15: 000000000000050a
+<4>[  354.916096]  </TASK>
+<0>[  356.424693] Shutting down cpus with NMI
+<0>[  356.424758] Kernel Offset: 0x3aa00000 from 0xffffffff81000000 (relocation range: 0xffffffff80000000-0xffffffffbfffffff)
+
+# === Key earlier excerpts (from Parts 11-3, the BUG report itself) ===
+
+# Producer-side detection — corruption point:
+# [Poison overwritten] 0xffff8b15dc6886c0-0xffff8b15dc6886cf @offset=1728. First byte 0x68 instead of 0x6b
+# BUG skbuff_small_head (Not tainted): Object corrupt
+# Slab 0xfffffa1c0471a200 objects=39 used=28 fp=0xffff8b15dc68c480 flags=0x17fffc000000240
+# Object 0xffff8b15dc6886c0 @offset=1728 fp=0xffff8b15dc68c480
+#
+# Object body:
+# Object   ffff8b15dc6886c0: 68 0d 23 a9 fa 08 8d 1a 9d cf 99 fe b6 91 5e f6  h.#...........^.
+# Object   ffff8b15dc6886d0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+# (... rest is uniform 0x6b poison through offset 0x970 ...)
+# Redzone  ffff8b15dc688680..6b0: bb bb bb bb bb bb bb bb (intact)
+# Redzone  ffff8b15dc688980     : bb bb bb bb bb bb bb bb (intact)
+# Padding  ffff8b15dc688990..9b0: 5a 5a 5a 5a 5a 5a 5a 5a (intact)
+#
+# Interpretation:
+# - Body 16-byte alignment was poisoned (0x6b) at free time, so this object
+#   really did transit the free path normally.
+# - Then the first 16 bytes of the body got overwritten with what looks like
+#   a kernel pointer pair: 0x1a8d08fa_a9230d68 0xf65e91b6_fe99cf9d.
+# - Redzones and padding are intact, so the writer respected the SLUB object
+#   start and wrote *into* the object content — not a buffer overrun.
+# - This means: a producer freed the object, kept (or recovered) the pointer,
+#   and wrote a new value into byte 0. Classic write-after-free into a SKB
+#   small-head, with the writer treating the freed memory as if it still
+#   owned it.
+#
+# Slab metadata:
+# - Cache: skbuff_small_head (NEWLY VISIBLE — slab_nomerge unmasked it;
+#   prior crashes called this "skbuff_head_cache" because it was merged).
+# - Slab is 39 objects total, 28 in use.
+# - Object 0xffff8b15dc6886c0 sits at @offset=1728 within the slab,
+#   freelist points elsewhere (0xffff8b15dc68c480), confirming this object
+#   is on the free list when get_partial_node() walked it.
+
+# CPU/process context at panic:
+# CPU: 2 UID: 0 PID: 2252 Comm: .tailscaled-wra Tainted: G    B    6.19.10 #1-NixOS
+# Hardware: HP ZBook Ultra G1a / BIOS X89 Ver. 01.03.02 06/18/2025
+#
+# panic_on_warn=1 promoted the WARN to a panic, exactly as intended.
+
+# === Modules linked in at crash (Parts 7-6, abridged) ===
+# rfcomm snd_seq_dummy snd_hrtimer snd_seq snd_seq_device fuse xt_connmark
+# xt_MASQUERADE xt_mark nft_chain_nat nf_nat hid_sensor_* industrialio*
+# hid_sensor_hub ccm i2c_designware_amdisp pinctrl_amdisp tun cmac
+# algif_hash algif_skcipher af_alg af_packet bnep amdgpu snd_acp_*
+# snd_sof_amd_* hp_bioscfg snd_pci_ps regmap_spi snd_amd_sdw_acpi
+# snd_ctl_led soundwire_amd joydev soundwire_generic_allocation mousedev
+# soundwire_bus snd_hda_codec_alc269 snd_hda_scodec_component
+# firmware_attributes_class snd_soc_sdca snd_hda_codec_realtek_lib
+# snd_hda_codec_generic snd_soc_core snd_hda_codec_atihdmi
+# snd_hda_codec_hdmi mt7925e snd_compress mt7925_common ac97_bus
+# snd_pcm_dmaengine amdxcp drm_panel_backlight_quirks snd_hda_intel
+# snd_rpl_pci_acp6x drm_buddy mt792x_lib snd_acp_pci drm_exec
+# snd_amd_acpi_mach btusb snd_hda_codec drm_suballoc_helper
+# snd_acp_legacy_common mt76_connac_lib drm_ttm_helper btrtl
+# snd_hda_core snd_pci_acp6x ttm btintel mt76 snd_intel_dspcfg
+# snd_pci_acp5x btmtk edac_mce_amd btbcm snd_intel_sdw_acpi
+# drm_display_helper xt_conntrack snd_hda_scodec_cs35l56_i2c
+# hid_multitouch intel_rapl_msr edac_core snd_rn_pci_acp3x hp_wmi
+# mac80211 spd5118 snd_hwdep snd_hda_scodec_cs35l56 cec nf_conntrack
+# amd_atl bluetooth snd_hda_cirrus_scodec sparse_keymap amdxdna
+# intel_rapl_common wmi_bmof snd_acp_config ghash_clmulni_intel snd_pcm
+# amd_pmf ucsi_acpi ecdh_generic snd_soc_cs35l56_shared i2c_algo_bit
+# sp5100_tco snd_soc_acpi nf_defrag_ipv6 ecc rapl typec_ucsi efi_pstore
+# amdtee snd_soc_cs_amp_lib cfg80211 gpu_sched rtc_cmos snd_timer
+# amd_sfh cs_dsp nf_defrag_ipv4 snd_pci_acp3x snd watchdog evdev video
+# platform_profile i2c_hid_acpi roles tiny_power_button mac_hid i2c_hid
+# serial_multi_instantiate ip6t_rpfilter typec soundcore crc16 thermal
+# wmi battery amd_isp4 i2c_piix4 rfkill wireless_hotkey amd_pmc ac
+# ipt_rpfilter libarc4 i2c_smbus button k10temp serio_raw xt_pkttype
+# xt_LOG nf_log_syslog xt_tcpudp nft_compat x_tables nf_tables
+# sch_fq_codel kvm_amd ccp rng_core kvm loop irqbypass nfnetlink
+# efivarfs dmi_sysfs autofs4 crc32c_cryptoapi dm_crypt encrypted_keys
+# trusted asn1_encoder tee hid_generic input_leds led_class atkbd
+# libps2 vivaldi_fmap nvme xhci_pci aesni_intel thunderbolt nvme_core
+# xhci_hcd nvme_keyring nvme_auth hkdf i8042 serio vfat fat usbhid hid
+# nls_iso8859_1 nls_cp437 dm_snapshot dm_bufio dm_mod btrfs blake2b
+# libblake2b xor raid6_pq
