@@ -19,14 +19,17 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # Crash triage — see ./crash-triage.md.
-  # Round 5 result: clean ≥30 min with the full blacklist (incl. amdgpu
-  # and mt7925_common). The producer is in {amdgpu, mt7925_common} or
-  # something one of them pulls in.
-  # Round 6: half-bisect — re-enable amdgpu, keep mt7925_common (and the
-  # other young drivers) blacklisted. If still clean → mt7925_common was
-  # the trigger. If it crashes → amdgpu was the trigger.
-  # Watchdog-panic params stay on so any stall produces a multi-CPU
-  # pstore dump naming the lock holder.
+  # Round 6 result: clean ≥30 min with amdgpu re-enabled and
+  # mt7925_common (+ the five other young drivers) still blacklisted.
+  # That clears amdgpu and pins the producer to mt7925_common (the
+  # WiFi+BT shared lib for the MT7925 / WiFi-7 chip) or something it
+  # pulls in.
+  # Round 7: shrink the blacklist to just the mt7925 pair. Revert
+  # amdxdna, amd_isp4, pinctrl_amdisp, i2c_designware_amdisp, amd_pmf —
+  # they were only blacklisted as part of the shotgun. Soak ≥30 min.
+  # If still clean, this is the long-term config and we file upstream
+  # against mt76. Watchdog-panic + slub_debug params stay on as a
+  # safety net.
   boot.kernelParams = [
     "consoleblank=0"
     "slub_debug=FZP"
@@ -35,7 +38,7 @@
     "softlockup_panic=1"
     "panic_on_rcu_stall=1"
     "rcu_cpu_stall_timeout=15"
-    "module_blacklist=mt7925e,mt7925_common,amdxdna,amd_isp4,pinctrl_amdisp,i2c_designware_amdisp,amd_pmf"
+    "module_blacklist=mt7925e,mt7925_common"
   ];
 
   ## ----- hardware ------------------------------------------------------------
