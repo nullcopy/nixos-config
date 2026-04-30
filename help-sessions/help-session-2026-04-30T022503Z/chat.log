@@ -1,0 +1,930 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/Projects/nixos-config/main
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ Please look at the wisp host configuration in this nix flake. I have been     
+  trying to diagnose a bug on that machine.                                     
+                                                                                
+  That system is an HP Zbook G1A. Occasionally the machine will just hang, and  
+  require me to hard-cycle it. It is incredibly rare when I have a desktop      
+  environment loaded, but it is very common when I'm in a bare TTY. I've tried  
+  blacklisting certain kernel modules to determine which drivers might be       
+  causing the bugs, and I believe it is the "amdgpu" module. See the commented  
+  PASS & FAIL markers. Whenever the "amdgpu" module is NOT blacklisted, and I   
+  drop into TTY, the system crashes almost predictably at about 5 minutes       
+  (maybe 5:30).                                                                 
+                                                                                
+  I just booted the system after one such crash, so the crash logs should be    
+  available to inspect. Please give me commands I can use on that system to get 
+   you whatever information you need to determine a root cause.                 
+
+  Searched for 2 patterns, read 2 files, listed 1 directory (ctrl+o to expand)
+
+● Bash(git -C /home/nullcopy/Projects/nixos-config/main log --oneline -20)
+  ⎿  ae0a13e HACKS
+     b9f74a9 Help Session 6
+     f4c3e48 Help Session 5
+     … +18 lines (ctrl+o to expand)
+
+● Bash(git -C /home/nullcopy/Projects/nixos-config/main log --all --oneline -30
+      | head -40)
+  ⎿  ae0a13e HACKS
+     b9f74a9 Help Session 6
+     f4c3e48 Help Session 5
+     … +21 lines (ctrl+o to expand)
+
+● Bash(git -C /home/nullcopy/Projects/nixos-config/main log --all --oneline
+      --diff-filter=A --name-only --pretty=format:'COMMIT:%h %s' | grep -B1 -i
+      "triage\|crash" |…)
+  ⎿  (No output)
+
+● Bash(git -C /home/nullcopy/Projects/nixos-config/main log --all --oneline --
+      "**/crash-triage.md" 2>/dev/null; git -C
+      /home/nullcopy/Projects/nixos-config/main grep…)
+  ⎿  ae0a13e992e8f994afa120629c1aeb24c46cb3ad:help-sessions/README.md
+     ae0a13e992e8f994afa120629c1aeb24c46cb3ad:help-sessions/help-session-20
+     26-04-29T090255Z/actions.md
+     … +6 lines (ctrl+o to expand)
+
+  Read 2 files, listed 2 directories (ctrl+o to expand)
+
+● I read the wisp config and the help-session findings (rounds 1–6 from earlier
+  today). Important context: prior rounds concluded mt7925_common was the
+  producer under a graphical session, but your new TTY-only PASS/FAIL table
+  contradicts that — with WiFi modules loaded throughout, the only thing that
+  flips clean ↔ crash is amdgpu. So this is either a different bug only
+  exercised in the TTY/fbcon path, or the previous attribution missed something.
+   We need fresh evidence.
+
+  You already have panic_on_warn=1, softlockup_panic=1, panic_on_rcu_stall=1,
+  and slub_debug=FZP on, so a hang or WARN should leave a pstore dump and a
+  kernel oops in the previous-boot journal. Run the commands below and paste the
+   output.
+
+  1. Confirm what just booted (so we can tell which test config crashed)
+
+  cat /proc/cmdline
+  uname -a
+  sudo dmidecode -s bios-version; sudo dmidecode -s system-product-name
+
+  2. Did pstore capture the crash?
+
+  sudo ls -lat /var/lib/systemd/pstore/ 2>/dev/null | head -20
+  sudo ls -lat /sys/fs/pstore/ 2>/dev/null | head -20
+  If there is a fresh dir in /var/lib/systemd/pstore/, dump it whole — that's
+  the gold:
+  NEWEST=$(sudo ls -t /var/lib/systemd/pstore/ | head -1); echo "=== $NEWEST
+  ==="; sudo ls -la /var/lib/systemd/pstore/"$NEWEST"; sudo cat
+  /var/lib/systemd/pstore/"$NEWEST"/dmesg.txt 2>/dev/null
+
+  3. Previous-boot kernel log — the part right before the crash matters most
+
+  sudo journalctl -k -b -1 --no-pager | tail -400
+  Plus a filtered view that surfaces oops / WARN / DRM / amdgpu-specific bits:
+  sudo journalctl -k -b -1 --no-pager | grep -iE 'amdgpu|drm|amd_pmf|smu|psp|gpu
+   reset|ring|fence|ib test|warn|bug:|oops|panic|stall|softlockup|call
+  trace|rip:|page fault|gpf|null pointer' | tail -200
+
+  4. Full unredacted previous-boot journal (so we can grep ourselves)
+
+  This is the most important single artifact — the watchdog-panic params should
+  have produced a multi-CPU dump in here:
+  sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.log
+  wc -l /tmp/wisp-prevboot.log
+  Save /tmp/wisp-prevboot.log into the next help-session dir as
+  oops-2026-04-29T<HHMM>Z.txt, or paste the last ~800 lines.
+
+  5. State of the suspect drivers on the current boot
+
+  This tells us what was loaded at the moment of the crash, since the current
+  boot started with the same blacklist (or absence of one) you're testing:
+  lsmod | grep -E '^(amdgpu|amdxdna|amd_pmf|amd_isp4|pinctrl_amdisp|i2c_designwa
+  re_amdisp|mt7925e|mt7925_common|mt76)'
+  ls /sys/module/amdgpu/drivers/ 2>/dev/null
+  lspci -nnk | grep -A3 -iE 'vga|3d|display|network|wireless'
+
+  6. amdgpu firmware load — Strix Halo is new silicon and missing/old fw is a 
+  common cause
+
+  sudo dmesg | grep -iE 'amdgpu|drm' | head -120
+  ls /run/current-system/firmware/amdgpu/ 2>/dev/null | grep -iE
+  'gc_|sdma|vcn|psp|mes|rlc' | head -40
+  modinfo amdgpu | grep -iE '^(version|srcversion|filename|firmware)'
+
+  7. Power-management state (a TTY-only crash that's stable under Wayland often 
+  points to an idle/PSR/clock-gating path)
+
+  sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info 2>/dev/null | head -60
+  cat /sys/class/drm/card*/device/power_dpm_state 2>/dev/null
+  cat /sys/class/drm/card*/device/power_dpm_force_performance_level 2>/dev/null
+
+  8. Tell me which test config you booted into for the crash
+
+  The module_blacklist= lines in hosts/wisp/configuration.nix are all commented
+  out right now, and /proc/cmdline from step 1 will confirm what actually
+  applied. Mention which of your PASS/FAIL rows the crashing boot was — I need
+  to know whether the run that just panicked had nothing blacklisted, or
+  pinctrl_amdisp,i2c_designware_amdisp only, or something else.
+
+  Once you paste these back I can read the oops/stack and either confirm amdgpu
+  (and if so, which subsystem — display / SMU / VCN / DPM) or push back on that
+  conclusion.
+
+✻ Cogitated for 1m 46s
+
+❯ Regarding prior rounds of help-sessions: I suspect there are a few bugs,      
+  perhaps from a few drivers. Earlier today (when I was running the             
+  help-sessions), it was making it hard to determine which modules were the     
+  cause of failure. Something changed in the last few hours, though (perhaps    
+  battery charge state on my laptop?) and now there is only one module          
+  contributing to crashes: amdgpu.                                              
+                                                                                
+  So, while the system seems to be only subjected to one failure mode, lets     
+  learn as much as we can about it. Then, my hope is that we can mitigate that  
+  failure mode, and when the other failure modes arise, it will be easy to      
+  single them out and mitigate them.                                            
+                                                                                
+  Does that sound reasonable?                                                   
+
+● Yes, reasonable. Mitigate one failure mode at a time, lock it down, then the
+  next one becomes easier to isolate when it surfaces.
+
+  Run the commands from my previous message — especially steps 2 (pstore dump),
+  3/4 (previous-boot kernel log), and 8 (which module_blacklist was active for
+  the crashing boot). Once I see the oops, I can name the amdgpu sub-path and
+  propose a targeted mitigation (kernel param, module option, or firmware pin)
+  rather than a broad module blacklist.
+
+❯ Please just give me the full list here. It's hard to scroll back              
+
+● 1. Boot identity — which config crashed
+
+  cat /proc/cmdline
+  uname -a
+  sudo dmidecode -s bios-version; sudo dmidecode -s system-product-name
+
+  2. Pstore dump (the gold, if the watchdog caught it)
+
+  sudo ls -lat /var/lib/systemd/pstore/ 2>/dev/null | head -20
+  sudo ls -lat /sys/fs/pstore/ 2>/dev/null | head -20
+  If a fresh dir exists:
+  NEWEST=$(sudo ls -t /var/lib/systemd/pstore/ | head -1); echo "=== $NEWEST
+  ==="; sudo ls -la /var/lib/systemd/pstore/"$NEWEST"; sudo cat
+  /var/lib/systemd/pstore/"$NEWEST"/dmesg.txt 2>/dev/null
+
+  3. Previous-boot kernel log — tail and filtered view
+
+  sudo journalctl -k -b -1 --no-pager | tail -400
+  sudo journalctl -k -b -1 --no-pager | grep -iE 'amdgpu|drm|amd_pmf|smu|psp|gpu
+   reset|ring|fence|ib test|warn|bug:|oops|panic|stall|softlockup|call
+  trace|rip:|page fault|gpf|null pointer' | tail -200
+
+  4. Full previous-boot journal saved to a file
+
+  sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.log
+  wc -l /tmp/wisp-prevboot.log
+  Save /tmp/wisp-prevboot.log into the next help-session dir as
+  oops-2026-04-29T<HHMM>Z.txt, or paste the last ~800 lines.
+
+  5. Suspect drivers loaded right now
+
+  lsmod | grep -E '^(amdgpu|amdxdna|amd_pmf|amd_isp4|pinctrl_amdisp|i2c_designwa
+  re_amdisp|mt7925e|mt7925_common|mt76)'
+  ls /sys/module/amdgpu/drivers/ 2>/dev/null
+  lspci -nnk | grep -A3 -iE 'vga|3d|display|network|wireless'
+
+  6. amdgpu firmware load
+
+  sudo dmesg | grep -iE 'amdgpu|drm' | head -120
+  ls /run/current-system/firmware/amdgpu/ 2>/dev/null | grep -iE
+  'gc_|sdma|vcn|psp|mes|rlc' | head -40
+  modinfo amdgpu | grep -iE '^(version|srcversion|filename|firmware)'
+
+  7. Power-management state
+
+  sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info 2>/dev/null | head -60
+  cat /sys/class/drm/card*/device/power_dpm_state 2>/dev/null
+  cat /sys/class/drm/card*/device/power_dpm_force_performance_level 2>/dev/null
+
+  8. Which test config was running when it crashed
+
+  Confirm from /proc/cmdline (step 1) what module_blacklist= value was actually
+  live for the crashing boot, and tell me which PASS/FAIL row that corresponds
+  to.
+
+❯ I do not have dmidecode installed. How can I pop a nix shell with dmidecode?  
+                                                                                
+  And then, please just give me a single compact list of the commands (no       
+  sections or gaps)                                                             
+
+● Pop a shell with dmidecode:
+  nix shell nixpkgs#dmidecode
+
+  Compact command list:
+  cat /proc/cmdline
+  uname -a
+  sudo dmidecode -s bios-version
+  sudo dmidecode -s system-product-name
+  sudo ls -lat /var/lib/systemd/pstore/ 2>/dev/null | head -20
+  sudo ls -lat /sys/fs/pstore/ 2>/dev/null | head -20
+  NEWEST=$(sudo ls -t /var/lib/systemd/pstore/ | head -1); echo "=== $NEWEST
+  ==="; sudo ls -la /var/lib/systemd/pstore/"$NEWEST"; sudo cat
+  /var/lib/systemd/pstore/"$NEWEST"/dmesg.txt 2>/dev/null
+  sudo journalctl -k -b -1 --no-pager | tail -400
+  sudo journalctl -k -b -1 --no-pager | grep -iE 'amdgpu|drm|amd_pmf|smu|psp|gpu
+   reset|ring|fence|ib test|warn|bug:|oops|panic|stall|softlockup|call
+  trace|rip:|page fault|gpf|null pointer' | tail -200
+  sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.log
+  wc -l /tmp/wisp-prevboot.log
+  lsmod | grep -E '^(amdgpu|amdxdna|amd_pmf|amd_isp4|pinctrl_amdisp|i2c_designwa
+  re_amdisp|mt7925e|mt7925_common|mt76)'
+  ls /sys/module/amdgpu/drivers/ 2>/dev/null
+  lspci -nnk | grep -A3 -iE 'vga|3d|display|network|wireless'
+  sudo dmesg | grep -iE 'amdgpu|drm' | head -120
+  ls /run/current-system/firmware/amdgpu/ 2>/dev/null | grep -iE
+  'gc_|sdma|vcn|psp|mes|rlc' | head -40
+  modinfo amdgpu | grep -iE '^(version|srcversion|filename|firmware)'
+  sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info 2>/dev/null | head -60
+  cat /sys/class/drm/card*/device/power_dpm_state 2>/dev/null
+  cat /sys/class/drm/card*/device/power_dpm_force_performance_level 2>/dev/null
+
+  Then tell me which PASS/FAIL row from the comment block matches what
+  /proc/cmdline shows.
+
+❯    cat /proc/cmdline                                                         
+                                                                                
+  initrd=\EFI\nixos\858grpvhx35w676kmk5gm6z7s0b7mbjq-initrd-linux-6.19.10-initr 
+  d.efi init=/nix/store/2hlscn0hhf41ml803ka2gfvzc8z8mvxd-nixos-system-wisp-26.0 
+  5.20260401.6201e20/init ttm.pages_limit=18874368 ttm.page_pool_size=18874368  
+  consoleblank=0 slub_debug=FZP slab_nomerge panic_on_warn=1 softlockup_panic=1 
+   panic_on_rcu_stall=1 rcu_cpu_stall_timeout=15 module_blacklist= loglevel=4   
+  lsm=landlock,yama,bpf                                                         
+                                                                                
+     uname -a                                                                  
+                                                                                
+  Linux wisp 6.19.10 #1-NixOS SMP PREEMPT_DYNAMIC Wed Mar 25 10:13:32 UTC 2026  
+  x86_64 GNU/Linux                                                              
+                                                                                
+     sudo dmidecode -s bios-version                                            
+                                                                                
+  X89 Ver. 01.03.02                                                             
+                                                                                
+     sudo dmidecode -s system-product-name                                     
+                                                                                
+  HP ZBook Ultra G1a 14 inch Mobile Workstation PC                              
+                                                                                
+     sudo ls -lat /var/lib/systemd/pstore/ 2>/dev/null | head -20              
+                                                                                
+  total 0                                                                       
+  drwxr-xr-x 1 root root   6 Apr 29 20:30 1777512597                            
+  drwxr-xr-x 1 root root 940 Apr 29 20:30 .                                     
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502932                            
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502933                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478692                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478693                            
+  drwxr-xr-x 1 root root   6 Apr 29 08:27 1777460252                            
+  drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458629                            
+  drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458630                            
+  drwxr-xr-x 1 root root   6 Apr 29 04:50 1777456197                            
+  drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451130                            
+  drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451131                            
+  drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451132                            
+  drwxr-xr-x 1 root root  12 Apr 29 03:29 1777451137                            
+  drwxr-xr-x 1 root root   6 Apr 29 03:29 1777451138                            
+  drwxr-xr-x 1 root root   6 Apr 13 16:20 1776115206                            
+  drwxr-xr-x 1 root root   6 Apr 13 16:20 1776115207                            
+  drwxr-xr-x 1 root root   6 Apr  8 14:19 1775675321                            
+  drwxr-xr-x 1 root root   6 Apr  8 14:06 1775672489                            
+                                                                                
+     sudo ls -lat /sys/fs/pstore/ 2>/dev/null | head -20                       
+                                                                                
+  total 0                                                                       
+  drwxr-x--- 2 root root 0 Apr 29 20:30 .                                       
+  drwxr-xr-x 9 root root 0 Apr 29 20:30 ..                                      
+                                                                                
+     NEWEST=$(sudo ls -t /var/lib/systemd/pstore/ | head -1); echo "===        
+  $NEWEST ==="; sudo ls -la                                                     
+                                                                                
+  === 1777512597 ===                                                            
+  total 20                                                                      
+  drwxr-xr-x 1 nullcopy users  158 Apr 29 04:59 .                               
+  drwx------ 1 nullcopy users  338 Apr 29 20:38 ..                              
+  drwxr-xr-x 1 nullcopy users   56 Apr 28 17:52 common                          
+  drwxr-xr-x 1 nullcopy users   22 Apr 28 00:19 devShells                       
+  -rwxr-xr-x 1 nullcopy users 5863 Apr 27 22:55 flake.lock                      
+  -rwxr-xr-x 1 nullcopy users 2337 Apr 28 00:19 flake.nix                       
+  drwxr-xr-x 1 nullcopy users  188 Apr 29 20:31 .git                            
+  drwxr-xr-x 1 nullcopy users   20 Apr 17 22:46 .githooks                       
+  drwxr-xr-x 1 nullcopy users  390 Apr 29 10:59 help-sessions                   
+  drwxr-xr-x 1 nullco                                                           
+  ──── (1632 lines hidden) ──────────────────────────────────────────────────── 
+  ware:       amdgpu/vega12_smc.bin                                             
+  firmware:       amdgpu/vega10_acg_smc.bin                                     
+  firmware:       amdgpu/vega10_smc.bin                                         
+  firmware:       amdgpu/vegam_smc.bin                                          
+  firmware:       amdgpu/polaris12_k_smc.bin                                    
+  firmware:       amdgpu/polaris12_smc.bin                                      
+  firmware:       amdgpu/polaris11_k2_smc.bin                                   
+  firmware:       amdgpu/polaris11_k_smc.bin                                    
+  firmware:       amdgpu/polaris11_smc_sk.bin                                   
+  firmware:       amdgpu/polaris11_smc.bin                                      
+  firmware:       amdgpu/polaris10_k2_smc.bin                                   
+  firmware:       amdgpu/polaris10_k_smc.bin                                    
+  firmware:       amdgpu/polaris10_smc_sk.bin                                   
+  firmware:       amdgpu/polaris10_smc.bin                                      
+  firmware:       amdgpu/fiji_smc.bin                                           
+  firmware:       amdgpu/tonga_k_smc.bin                                        
+  firmware:       amdgpu/tonga_smc.bin                                          
+  firmware:       amdgpu/topaz_k_smc.bin                                        
+  firmware:       amdgpu/topaz_smc.bin                                          
+  firmware:       amdgpu/hawaii_k_smc.bin                                       
+  firmware:       amdgpu/hawaii_smc.bin                                         
+  firmware:       amdgpu/bonaire_k_smc.bin                                      
+  firmware:       amdgpu/bonaire_smc.bin                                        
+  firmware:       amdgpu/banks_k_2_smc.bin                                      
+  firmware:       amdgpu/hainan_k_smc.bin                                       
+  firmware:       amdgpu/hainan_smc.bin                                         
+  firmware:       amdgpu/oland_k_smc.bin                                        
+  firmware:       amdgpu/oland_smc.bin                                          
+  firmware:       amdgpu/verde_k_smc.bin                                        
+  firmware:       amdgpu/verde_smc.bin                                          
+  firmware:       amdgpu/pitcairn_k_smc.bin                                     
+  firmware:       amdgpu/pitcairn_smc.bin                                       
+  firmware:       amdgpu/tahiti_smc.bin                                         
+  firmware:       amdgpu/dcn_4_0_1_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_6_dmcub.bin                                      
+  firmware:       amdgpu/dcn_3_5_1_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_5_dmcub.bin                                      
+  firmware:       amdgpu/navi12_dmcu.bin                                        
+  firmware:       amdgpu/raven_dmcu.bin                                         
+  firmware:       amdgpu/dcn_3_2_1_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_2_0_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_1_6_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_1_5_dmcub.bin                                    
+  firmware:       amdgpu/dcn_3_1_4_dmcub.bin                                    
+  firmware:       amdgpu/yellow_carp_dmcub.bin                                  
+  firmware:       amdgpu/beige_goby_dmcub.bin                                   
+  firmware:       amdgpu/dimgrey_cavefish_dmcub.bin                             
+  firmware:       amdgpu/vangogh_dmcub.bin                                      
+  firmware:       amdgpu/green_sardine_dmcub.bin                                
+  firmware:       amdgpu/navy_flounder_dmcub.bin                                
+  firmware:       amdgpu/sienna_cichlid_dmcub.bin                               
+  firmware:       amdgpu/renoir_dmcub.bin                                       
+  firmware:       amdgpu/isp_4_1_1.bin                                          
+                                                                                
+     sudo cat /sys/kernel/debug/dri/0/amdgpu_pm_info 2>/dev/null | head -60    
+                                                                                
+     cat /sys/class/drm/card*/device/power_dpm_state 2>/dev/null               
+                                                                                
+  performance                                                                   
+                                                                                
+     cat /sys/class/drm/card*/device/power_dpm_force_performance_level         
+  2>/dev/null                                                                   
+                                                                                
+  auto                                                                          
+                                                                                
+  /proc/cmdline is from the system running with no modules blacklisted (a FAIL  
+  row)                                                                          
+
+● The pstore dump rules out amdgpu. The panic is in the WiFi runtime-PM path:
+
+  WARNING: net/core/netmem_priv.h:18 at page_pool_clear_pp_info+0x39/0x40
+  Workqueue: mt76 mt792x_pm_wake_work [mt792x_lib]
+   page_pool_clear_pp_info
+   page_pool_return_netmem
+   mt76_dma_rx_cleanup [mt76]
+   mt792x_wpdma_reset [mt792x_lib]
+   mt792x_wpdma_reinit_cond [mt792x_lib]
+   mt792xe_mcu_drv_pmctrl [mt792x_lib]
+   mt792x_mcu_drv_pmctrl [mt792x_lib]
+   mt792x_pm_wake_work [mt792x_lib]
+
+  panic_on_warn=1 tripped a pp_magic check while mt76_dma_rx_cleanup was
+  returning RX netmems to the page pool from the WiFi chip's runtime-PM wake
+  handler. Same mt76/mt7925 family the round-2 and round-3 slub_debug receipts
+  pointed at (skbuff_small_head / anon_vma_chain 16-byte pointer-shaped writes).
+   The crash hit at uptime 312s — the "≈5 min" you observed.
+
+  The amdgpu PASS/FAIL pattern was a red herring. The path that fires the bug is
+   mt792x_pm_wake_work, which runs after the WiFi chip has been idle long enough
+   to enter MCU power-save and then needs to be woken. TTY vs. desktop probably
+  changes the idle-vs-busy pattern of the WiFi link enough to gate how often
+  that wake cycle fires, which made it look like amdgpu was the variable. The
+  producer is mt76.
+
+  Mitigation
+
+  Re-apply your round-7 plan — blacklist the mt7925 pair. Edit
+  hosts/wisp/configuration.nix:
+
+  "module_blacklist=mt7925e,mt7925_common"
+
+  (uncomment that one line; leave the others commented). Then sudo nixos-rebuild
+   switch --flake .#wisp && sudo reboot. WiFi/BT will be off — use ethernet via
+  the dock, a phone hotspot, or a USB WiFi dongle. Soak the TTY case ≥30 min to
+  confirm the 5-minute crash is gone.
+
+  If you want to keep WiFi working while we wait on upstream, the alternative is
+   to suppress the runtime-PM wake path that triggers the WARN. Add to
+  boot.kernelParams:
+
+  "mt7925e.disable_aspm=1"
+
+  — if the module accepts it (modinfo mt7925e | grep parm will show; round 6
+  didn't try this). The blacklist is the safer bet for now since we already have
+   one clean soak with that config.
+
+  File this upstream once the blacklist soak is clean
+
+  linux-wireless@vger.kernel.org and linux-mediawifi-style trees, against the
+  mt76 driver / mt7925 family. Attach:
+  - This pstore dump (/var/lib/systemd/pstore/1777512597/001/dmesg.txt)
+  - Round-2 and round-3 oops dumps from help-sessions/help-session-2026-04-29T*
+  - Kernel: 6.19.10, BIOS X89 Ver. 01.03.02, board HP ZBook Ultra G1a 14 / 8D01
+  - mt7925e WM FW: ____000000 build 20260106153120, ASIC 79250000
+
+  Want me to make the configuration.nix edit and update the help-session
+  findings/actions to record that the new TTY data confirms (rather than
+  contradicts) the round-6 attribution?
+
+✻ Worked for 1m 5s
+
+❯ I'm not convinced amdgpu is unrelated. I tried SEVERAL times, and EVERY time  
+  I booted with amdgpu, the system would crash. And it never crashed without    
+  amdgpu (in the last few hours of testing).                                    
+                                                                                
+  I'm not denying the culprit is the mediatek driver, but perhpas it only       
+  misbehaves when the gpu driver is enabled, e.g. perhaps an electrical         
+  power/noise issue.                                                            
+
+● You're right — I was dismissing your data. Both things can be true: the
+  corrupted-state-and-WARN happens inside mt76, but it only happens when
+  amdgpu's presence changes the system's power-management behavior enough to
+  make mt792x_pm_wake_work actually fire. That fits everything we have:
+
+  - The oops is in the WiFi MCU wake handler. That handler only runs after the
+  chip has entered MCU power-save and needs to be woken. With amdgpu off, the
+  WiFi chip likely never enters that low-power state at all, so the buggy
+  wake/DMA-reset path is never executed and no WARN fires.
+  - amdgpu pulls in amd_pmf and the SMU and changes ASPM/D-state policy across
+  the SoC. On Strix Halo the iGPU, NPU, and WiFi share the PCIe fabric and SMU —
+   a power-policy change on one side moves the others.
+  - Your dmesg even reports amdgpu 0000:c3:00.0: amdgpu: Runtime PM not 
+  available — so it's not amdgpu's own runtime PM, but it's still influencing
+  the platform PM state that gates the WiFi chip's MCU sleep.
+  - TTY vs. Wayland would matter for exactly this reason: a quiet TTY hits
+  deeper idle, the WiFi chip sleeps longer/more often, the wake path runs more
+  often.
+
+  Electrical/noise coupling is possible but harder to test, so let's hold that
+  hypothesis and try the cheaper one first: stop the WiFi chip from entering MCU
+   power-save (or stop the PCIe link from changing state) while keeping both
+  drivers loaded.
+
+  Proposed test order — cheap → invasive
+
+  Test A: pin the WiFi PCIe device to D0 (most surgical). This blocks the exact
+  wake path that crashed without touching amdgpu, ASPM, or anything else.
+
+  In hosts/wisp/configuration.nix, add a tmpfiles rule that writes on to the
+  WiFi PCIe device's power/control at boot:
+
+  systemd.tmpfiles.rules = [
+    "w /sys/bus/pci/devices/0000:c1:00.0/power/control - - - - on"
+  ];
+
+  Plus a udev rule so it sticks if the device re-enumerates:
+
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="pci", KERNEL=="0000:c1:00.0", 
+  ATTR{power/control}="on"
+  '';
+
+  Leave module_blacklist= empty, leave amdgpu loaded, soak in TTY ≥30 min.
+
+  - Clean: confirms it's the runtime-PM wake path. WiFi stays usable. We can
+  also report this upstream as a clean repro recipe.
+  - Crash: path-pinning didn't catch it; move to test B.
+
+  Test B: disable PCIe ASPM globally — pcie_aspm=off in boot.kernelParams. Same
+  soak. This forces all PCIe links to L0 and rules out link-state transitions (a
+   common couplant for "GPU loaded, WiFi misbehaves" bugs).
+
+  Test C: pin amdgpu to high performance —
+  power_dpm_force_performance_level=high via tmpfiles. Tests whether GPU DPM
+  transitions, not link transitions, are the trigger. (Currently auto.)
+
+  Tests A/B/C are all cheap, single-knob, fully reversible, and keep WiFi/BT
+  working. If A is clean we have a real fix that doesn't sacrifice WiFi.
+
+  About the upstream report
+
+  If A or B is clean, the report becomes much sharper: "mt76 mt792x_pm_wake_work
+   corrupts page-pool state on MT7925 when the chip is allowed to enter MCU
+  power-save, observable on AMD Strix Halo with amdgpu loaded; pinning the
+  device to D0 (or pcie_aspm=off) avoids the path." That's a much more useful
+  bug report than a blanket "blacklist the driver" workaround.
+
+  Want me to make the test-A edit (tmpfiles + udev rule) on the current branch
+  and update hosts/wisp/configuration.nix's comment block to record this refined
+   hypothesis?
+
+✻ Churned for 44s
+
+❯ Ok, this is great. Please create a new help-session and record all of your    
+  findings etc there                                                            
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(date -u +%Y-%m-%dT%H%M%SZ)
+  ⎿  2026-04-30T022503Z
+
+● Bash(mkdir -p /home/nullcopy/Projects/nixos-config/main/help-sessions/help-ses
+      sion-2026-04-30T022503Z)
+  ⎿  Done
+● Write(help-sessions/help-session-2026-04-30T022503Z/findings.md)
+  ⎿  Wrote 206 lines to
+     help-sessions/help-session-2026-04-30T022503Z/findings.md
+       2 name: Help session findings — round 7 (TTY crash, refined)
+       3 description: Wisp crash on Strix Halo — pstore confirms producer
+          is the empirical gating condition; refined hypothesis is GPU-in
+         duced platform PM state changes that let the WiFi chip enter MCU
+       4 type: projecthere the wake path then corrupts state
+       5 ---
+       7 # Help session findings — round 7 (refined)
+       8 
+         MD Strix Halo). crash triage on wisp (HP ZBook Ultra G1a 14" / A
+      10 - Round 1: `../help-session-2026-04-29T090255Z/findings.md`
+     … +245 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-30T022503Z/actions.md)
+  ⎿  Wrote 147 lines to
+     help-sessions/help-session-2026-04-30T022503Z/actions.md
+      1 ---
+      2 name: actions — wisp crash triage, round 7 (refined)
+      3 description: What was done in round 7 (diagnosis only this turn —
+         no repo edits yet) and what the user needs to do next
+      4 type: project
+      5 ---
+      6 
+      7 # actions — wisp crash triage, round 7 (refined)
+      8 
+      9 ## Done this session (2026-04-30 UTC)
+     … +149 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Created help-sessions/help-session-2026-04-30T022503Z/ with:
+
+  - findings.md — round-7 (refined) diagnosis. Records the pstore smoking gun
+  (mt792x_pm_wake_work → mt76_dma_rx_cleanup → page_pool_clear_pp_info WARN at
+  312s uptime), the refined two-part hypothesis (mt76 producer, amdgpu gating
+  condition via SoC PM state on Strix Halo), why TTY-vs-Wayland fits,
+  hardware/firmware snapshot, the test-ladder plan (A: pin WiFi PCIe to D0, B:
+  pcie_aspm=off, C: pin amdgpu DPM to high, fallback: round-6 blacklist), and an
+   outcomes table.
+  - actions.md — explicit "no repo edits this turn", the user's next-step
+  instructions for test A (tmpfiles + udev rule for
+  /sys/bus/pci/devices/0000:c1:00.0/power/control), what to capture after each
+  test, the upstream-report carry-forward, and a note for future-Claude not to
+  collapse the producer/gating-condition distinction without checking back.
+
+  chat.log will need to come from a /export once you're ready to end this chat —
+   per help-sessions/README.md step 1.
+
+✻ Worked for 2m 20s
+
+❯ /export                                                                       
+  ⎿  Conversation exported to: /home/nullcopy/Projects/nixos-config/main/2026-04
+     -29-212742-local-command-caveatcaveat-the-messages-below.txt
+
+❯ Oops, we forgot to make the changes to the host configuration. Please make    
+  those changes, explain the steps you want me to run, and be sure this test    
+  (and the hypothesis it is testing) are documented in the help-session         
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 44 lines, removed 17 lines
+      18    boot.loader.efi.canTouchEfiVariables = true;
+      19    boot.kernelPackages = pkgs.linuxPackages_latest;
+      20  
+      21 -  # Crash triage — see ./crash-triage.md.                      
+      22 -  # Round 6 result: clean ≥30 min with amdgpu re-enabled and   
+      23 -  # mt7925_common (+ the five other young drivers) still blackl
+         -isted.                                                         
+      24 -  # That clears amdgpu and pins the producer to mt7925_common (
+         -the                                                            
+      25 -  # WiFi+BT shared lib for the MT7925 / WiFi-7 chip) or somethi
+         -ng it                                                          
+      26 -  # pulls in.                                                  
+      27 -  # Round 7: shrink the blacklist to just the mt7925 pair. Reve
+         -rt                                                             
+      28 -  # amdxdna, amd_isp4, pinctrl_amdisp, i2c_designware_amdisp, a
+         -md_pmf —                                                       
+      29 -  # they were only blacklisted as part of the shotgun. Soak ≥30
+         - min.                                                          
+      30 -  # If still clean, this is the long-term config and we file up
+         -stream                                                         
+      31 -  # against mt76. Watchdog-panic + slub_debug params stay on as
+         - a                                                             
+      32 -  # safety net.                                                
+      21 +  # Crash triage — see help-sessions/help-session-2026-04-30T02
+         +2503Z/.                                                        
+      22 +  #                                                            
+      23 +  # Round 7 (refined). Producer/gating split:                  
+      24 +  #  - Producer: mt76. pstore from the most recent crash (uptim
+         +e 312s)                                                        
+      25 +  #    shows panic_on_warn=1 tripping a page_pool pp_magic chec
+         +k inside                                                       
+      26 +  #    mt76_dma_rx_cleanup, called from mt792x_pm_wake_work — t
+         +he WiFi                                                        
+      27 +  #    runtime-PM wake handler doing a DMA reset.              
+      28 +  #  - Gating condition: amdgpu loaded. amdgpu pulls in amd_pmf
+         + and                                                           
+      29 +  #    smu_v14_0_0 and changes platform PM state on Strix Halo,
+         + which is                                                      
+      30 +  #    what lets the WiFi chip enter MCU power-save and run the
+         + buggy                                                         
+      31 +  #    wake path. With amdgpu off, the chip never sleeps deep e
+         +nough,                                                         
+      32 +  #    so the wake path doesn't fire and no WARN. TTY hits deep
+         +er idle                                                        
+      33 +  #    than Wayland, which is why the bug only reproduces in TT
+         +Y.                                                             
+      34 +  #                                                            
+      35 +  # Test A (this revision): pin the WiFi PCIe device to D0 so i
+         +t never                                                        
+      36 +  # enters runtime-PM sleep. Most surgical knob — no module bla
+         +cklist,                                                        
+      37 +  # no global ASPM change, amdgpu stays loaded. Soak in TTY ≥30
+         + min.                                                          
+      38 +  # If clean, this is the live mitigation and we file upstream 
+         +against                                                        
+      39 +  # mt76/mt7925.                                               
+      40 +  # If it still crashes, drop these rules and try Test B       
+      41 +  # (boot.kernelParams += "pcie_aspm=off"), then Test C (pin am
+         +dgpu DPM                                                       
+      42 +  # to high), then the round-6 fallback (module_blacklist=mt792
+         +5e,mt7925_common).                                             
+      43 +  #                                                            
+      44 +  # Watchdog-panic + slub_debug params stay on as a safety net 
+         +through                                                        
+      45 +  # the test cycle. They caught this oops; they need to keep ca
+         +tching                                                         
+      46 +  # the next one if Test A doesn't hold.                       
+      47 +  #                                                            
+      48 +  # Historical PASS/FAIL table (TTY soaks, this round):        
+      49 +  #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+         +_pmf,amdgpu  PASS                                              
+      50 +  #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+         +gpu          PASS                                              
+      51 +  #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp    
+         +             FAIL                                              
+      52 +  #   module_blacklist=amdgpu                                  
+         +             PASS                                              
+      53 +  #   module_blacklist=                                        
+         +             FAIL  ← dump captured here                        
+      54    boot.kernelParams = [
+      55      "consoleblank=0"
+      56      "slub_debug=FZP"
+     ...
+      59      "softlockup_panic=1"
+      60      "panic_on_rcu_stall=1"
+      61      "rcu_cpu_stall_timeout=15"
+      41 -    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+         -_pmf,amdgpu" # <---PASS                                        
+      42 -    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+         -gpu" # <---PASS                                                
+      43 -    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp" # 
+         -<--FAIL                                                        
+      44 -    #"module_blacklist=amdgpu" # <---PASS                      
+      45 -    #"module_blacklist=" <---FAIL                              
+      62    ];
+      63  
+      64 +  # Test A: keep the WiFi PCIe device (MT7925 @ 0000:c1:00.0) i
+         +n D0 so                                                        
+      65 +  # mt792x_pm_wake_work — the path that crashed at uptime 312s 
+         +— never                                                        
+      66 +  # runs. tmpfiles writes the value at boot; the udev rule reap
+         +plies it                                                       
+      67 +  # if the device re-enumerates (e.g. after a PCI rescan).     
+      68 +  systemd.tmpfiles.rules = [                                   
+      69 +    "w /sys/bus/pci/devices/0000:c1:00.0/power/control - - - - 
+         +on"                                                            
+      70 +  ];                                                           
+      71 +  services.udev.extraRules = ''                                
+      72 +    ACTION=="add", SUBSYSTEM=="pci", KERNEL=="0000:c1:00.0", AT
+         +TR{power/control}="on"                                         
+      73 +  '';                                                          
+      74 +                                                               
+      75    ## ----- hardware -------------------------------------------
+          -----------------
+      76    hardware.graphics.enable = true;
+      77  
+
+  Read 1 file (ctrl+o to expand)
+
+● Now I'll update actions.md to record that the Test-A edit landed and replace
+  the "do this in your config" instructions with concrete rebuild/soak steps.
+
+● Update(help-sessions/help-session-2026-04-30T022503Z/actions.md)
+  ⎿  Added 14 lines, removed 4 lines
+      27    - TTY-vs-Wayland gates this further: TTY hits deeper system i
+          dle,
+      28      so the wake path fires more often. Round 6's clean Wayland 
+          soak
+      29      is consistent — it just didn't exercise the path.
+      30 -- **No repo edits this turn.** The plan below proposes test A f
+         -irst                                                           
+      31 -  because it keeps both drivers loaded and is fully reversible.
+         - User                                                          
+      32 -  asked for test commands and a help-session record before any 
+      33 -  configuration change.                                        
+      30  - Created this session dir: `help-sessions/help-session-2026-04
+          -30T022503Z/`.
+      31 +- Applied **Test A** to `hosts/wisp/configuration.nix`:        
+      32 +  - Removed all the commented `module_blacklist=…` PASS/FAIL li
+         +nes from                                                       
+      33 +    `boot.kernelParams` (preserved as a comment block above for
+         + the                                                           
+      34 +    record). The watchdog-panic + slub_debug + slab_nomerge par
+         +ams stay                                                       
+      35 +    on.                                                        
+      36 +  - Added `systemd.tmpfiles.rules` to write `on` to            
+      37 +    `/sys/bus/pci/devices/0000:c1:00.0/power/control` at boot, 
+         +pinning                                                        
+      38 +    the MT7925 WiFi device to D0.                              
+      39 +  - Added a `services.udev.extraRules` rule with the same effec
+         +t so the                                                       
+      40 +    setting is reapplied if the PCI device re-enumerates (e.g. 
+         +PCI                                                            
+      41 +    rescan, hotplug).                                          
+      42 +  - Updated the comment block above `boot.kernelParams` to reco
+         +rd the                                                         
+      43 +    refined producer/gating-condition split, the test-ladder pl
+         +an, and                                                        
+      44 +    the historical PASS/FAIL table.                            
+      45  
+      46  ## What the user needs to do before the next chat
+      47  
+
+● Update(help-sessions/help-session-2026-04-30T022503Z/actions.md)
+  ⎿  Added 41 lines, removed 21 lines
+       48  The plan is a ladder: cheapest, most surgical first; each step
+            keeps
+       49  WiFi/BT working. Stop at the first one that's clean.
+       50  
+       51 -### Test A — pin the WiFi PCIe device to D0                   
+       51 +### Test A — pin the WiFi PCIe device to D0  *(applied this se
+          +ssion)*                                                       
+       52  
+       53 -In `hosts/wisp/configuration.nix`, add (alongside existing con
+          -fig):                                                         
+       53 +The configuration change is already on disk in                
+       54 +`hosts/wisp/configuration.nix`. The user just needs to rebuild
+          +, reboot,                                                     
+       55 +and soak.                                                     
+       56  
+       55 -```nix                                                        
+       56 -systemd.tmpfiles.rules = [                                    
+       57 -  "w /sys/bus/pci/devices/0000:c1:00.0/power/control - - - - o
+          -n"                                                            
+       58 -];                                                            
+       59 -services.udev.extraRules = ''                                 
+       60 -  ACTION=="add", SUBSYSTEM=="pci", KERNEL=="0000:c1:00.0", ATT
+          -R{power/control}="on"                                         
+       61 -'';                                                           
+       62 -```                                                           
+       57 +1. Rebuild and reboot:                                        
+       58 +   ```                                                        
+       59 +   sudo nixos-rebuild switch --flake .#wisp                   
+       60 +   sudo reboot                                                
+       61 +   ```                                                        
+       62  
+       64 -Leave `module_blacklist=` empty in `boot.kernelParams`. Leave 
+          -amdgpu                                                        
+       65 -loaded. Soak in TTY ≥30 min (the crash hit at 312s last time, 
+          -so 30                                                         
+       66 -min is a comfortable margin).                                 
+       63 +2. After boot, log in to a TTY (Ctrl-Alt-F2 from the greeter, 
+          +or just                                                       
+       64 +   stay on the TTY rather than starting a Wayland session). Co
+          +nfirm                                                         
+       65 +   the change took:                                           
+       66 +   ```                                                        
+       67 +   cat /proc/cmdline                                          
+       68 +   cat /sys/bus/pci/devices/0000:c1:00.0/power/control        
+       69 +   lsmod | grep -E '^(amdgpu|mt7925e|mt7925_common|mt76|amd_pm
+          +f)'                                                           
+       70 +   ```                                                        
+       71 +   Expect: kernel cmdline shows no `module_blacklist`, `power/
+          +control`                                                      
+       72 +   prints `on`, and `lsmod` shows amdgpu **and** the mt7925 fa
+          +mily                                                          
+       73 +   loaded.                                                    
+       74  
+       68 -Verify the rule took:                                         
+       75 +3. Use the machine in TTY for ≥30 min — the crash hit at 312s 
+          +last                                                          
+       76 +   time, so 30 min is a comfortable margin. Anything that exer
+          +cises                                                         
+       77 +   the system normally is fine; the bug fires from idle, not l
+          +oad.                                                          
+       78 +   You can also keep WiFi/BT in use during the soak — that's t
+          +he                                                            
+       79 +   whole point of this test (we want to keep both working).   
+       80  
+       70 -```                                                           
+       71 -cat /sys/bus/pci/devices/0000:c1:00.0/power/control           
+       72 -# should print: on                                            
+       73 -```                                                           
+       81 +4. Outcomes:                                                  
+       82 +   - **Clean ≥30 min in TTY** → mitigation found. This becomes
+          + the                                                          
+       83 +     long-term config. We file upstream against mt76/mt7925 wi
+          +th the                                                        
+       84 +     pstore + the round-2/3 receipts.                         
+       85 +   - **Crashes** → revert the tmpfiles + udev rules and run Te
+          +st B                                                          
+       86 +     (`pcie_aspm=off`).                                       
+       87 +   - **Different new oops** → capture and share the new pstore
+          +; we                                                          
+       88 +     treat it as a separate finding.                          
+       89  
+       75 -- **Clean ≥30 min in TTY** → mitigation found. Lock the rules 
+          -in.                                                           
+       76 -  File upstream against mt76/mt7925.                          
+       77 -- **Crashes** → drop these rules and run test B.              
+       90 +5. After the soak, paste back:                                
+       91 +   ```                                                        
+       92 +   sudo ls -lat /var/lib/systemd/pstore/ | head -10           
+       93 +   sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.lo
+          +g; wc -l /tmp/wisp-prevboot.log                               
+       94 +   cat /sys/bus/pci/devices/0000:c1:00.0/power/control        
+       95 +   ```                                                        
+       96 +   If a new pstore dir appeared, attach its `001/dmesg.txt` he
+          +re as                                                         
+       97 +   `oops-<HHMM>Z.txt`.                                        
+       98  
+       99  ### Test B — disable PCIe ASPM globally
+      100  
+
+● Update(help-sessions/help-session-2026-04-30T022503Z/actions.md)
+  ⎿  Added 2 lines, removed 1 line
+       98  
+       99  ### Test B — disable PCIe ASPM globally
+      100  
+      101 -If A failed: in `boot.kernelParams`, add `"pcie_aspm=off"`. Sa
+          -me soak.                                                      
+      101 +If A failed: revert the Test-A tmpfiles + udev rules, then in 
+      102 +`boot.kernelParams` add `"pcie_aspm=off"`. Rebuild, reboot, sa
+          +me soak.                                                      
+      103  
+      104  - **Clean** → lock in `pcie_aspm=off`. File upstream.
+      105  - **Crashes** → run test C.
+
+● Test A is now applied to hosts/wisp/configuration.nix (tmpfiles + udev rule
+  pinning 0000:c1:00.0/power/control to on, comment block updated to record the
+  producer/gating-condition split, old PASS/FAIL lines preserved as a comment
+  block above), and the help-session actions.md reflects what was edited.
+
+  What to run
+
+  sudo nixos-rebuild switch --flake .#wisp
+  sudo reboot
+
+  After reboot, drop into a TTY (or just don't start a graphical session) and
+  confirm the change took:
+
+  cat /proc/cmdline
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+  lsmod | grep -E '^(amdgpu|mt7925e|mt7925_common|mt76|amd_pmf)'
+
+  Expect kernel cmdline with no module_blacklist, power/control printing on, and
+   lsmod showing both amdgpu and the mt7925 family loaded.
+
+  Soak in TTY ≥30 min (the crash hit at 312s last time, so 30 min is a
+  comfortable margin). The bug fires from idle, so just leaving the TTY sitting
+  there is the worst case — you don't need to drive load. WiFi/BT should be
+  usable during the soak; that's the whole point of pinning to D0 instead of
+  blacklisting.
+
+  After the soak, paste:
+
+  sudo ls -lat /var/lib/systemd/pstore/ | head -10
+  sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.log; wc -l
+  /tmp/wisp-prevboot.log
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+
+  If a new pstore dir appeared, attach its 001/dmesg.txt into the session dir as
+   oops-<HHMM>Z.txt.
+
+  If clean: Test A is the live mitigation, we file upstream against mt76. If it
+  crashes again: revert the two new blocks and we move to Test B
+  (pcie_aspm=off).
+
+✻ Crunched for 1m 23s
