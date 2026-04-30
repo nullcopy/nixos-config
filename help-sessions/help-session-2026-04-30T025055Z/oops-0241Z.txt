@@ -1,0 +1,157 @@
+Round-8 pstore: /var/lib/systemd/pstore/1777516867/001/dmesg.txt
+Captured after Test A (D0 pin on 0000:c1:00.0) was applied and verified live.
+Reassembled below in chronological order (Part1 = oldest in pstore numbering,
+but it actually contains the panic itself; pstore writes parts back-to-front).
+Re-ordered here Part18 → Part1 (boot → panic).
+
+---- Part 18 → Part 6 (boot, module load, ~5 min of normal operation) ----
+... pre-panic boot noise; key lines:
+
+amdgpu 0000:c3:00.0: amdgpu: Runtime PM not available
+amdgpu 0000:c3:00.0: amdgpu: [drm] Using custom brightness curve
+amdgpu 0000:c3:00.0: [drm] Registered 4 planes with drm panic
+[drm] Initialized amdgpu 3.64.0 for 0000:c3:00.0 on minor 1
+fbcon: amdgpudrmfb (fb0) is primary device
+[drm] pre_validate_dsc:1667 MST_DSC dsc precompute is not needed
+tun: Universal TUN/TAP device driver, 1.6
+Console: switching to colour frame buffer device 180x56
+amdgpu 0000:c3:00.0: [drm] fb0: amdgpudrmfb frame buffer device
+wlp193s0: authenticate / associate with 62:a4:b7:5c:51:d3 — associated
+hid-generic 0020:1022:0001.0007: hidraw2: SENSOR HUB HID v0.00 ...
+hid-sensor-hub 0020:1022:0001.0007: ...
+fuse: init (API version 7.45)
+systemd-journald[1387]: Time jumped backwards, rotating.
+Bluetooth: RFCOMM TTY layer initialized
+hrtimer: interrupt took 12253 ns
+
+---- Part 6 modules linked at panic time (full list, kept verbatim) ----
+rfcomm snd_seq_dummy snd_hrtimer snd_seq snd_seq_device fuse xt_connmark
+xt_MASQUERADE xt_mark nft_chain_nat nf_nat hid_sensor_gyro_3d hid_sensor_prox
+hid_sensor_trigger industrialio_triggered_buffer kfifo_buf hid_sensor_iio_common
+industrialio hid_sensor_hub ccm pinctrl_amdisp i2c_designware_amdisp tun cmac
+algif_hash algif_skcipher af_alg af_packet bnep amdgpu snd_acp_legacy_mach
+snd_acp_mach snd_soc_nau8821 snd_acp3x_rn snd_acp70 snd_acp_i2s snd_acp_pdm
+snd_soc_dmic snd_acp_pcm snd_sof_amd_acp70 snd_sof_amd_acp63 snd_sof_amd_vangogh
+snd_sof_amd_rembrandt snd_sof_amd_renoir snd_sof_amd_acp snd_sof_pci
+snd_sof_xtensa_dsp snd_sof mt7925e mt7925_common snd_hda_scodec_cs35l56_spi
+regmap_spi snd_sof_utils mt792x_lib snd_pci_ps snd_ctl_led snd_soc_acpi_amd_match
+snd_amd_sdw_acpi mt76_connac_lib soundwire_amd snd_hda_codec_alc269
+soundwire_generic_allocation snd_hda_scodec_component mt76 soundwire_bus
+snd_hda_codec_realtek_lib snd_hda_codec_generic snd_soc_sdca
+snd_hda_codec_atihdmi snd_hda_codec_hdmi mac80211 hp_bioscfg snd_soc_core
+snd_hda_intel snd_compress amdxcp ac97_bus snd_hda_codec
+drm_panel_backlight_quirks btusb drm_buddy snd_pcm_dmaengine btrtl
+snd_rpl_pci_acp6x drm_exec snd_hda_core btintel drm_suballoc_helper snd_acp_pci
+drm_ttm_helper snd_amd_acpi_mach btmtk snd_intel_dspcfg ttm snd_acp_legacy_common
+btbcm snd_hda_scodec_cs35l56_i2c snd_intel_sdw_acpi firmware_attributes_class
+snd_pci_acp6x snd_hda_scodec_cs35l56 spd5118 drm_display_helper snd_hwdep
+xt_conntrack sp5100_tco joydev snd_pci_acp5x snd_hda_cirrus_scodec mousedev
+cfg80211 bluetooth cec snd_rn_pci_acp3x snd_soc_cs35l56_shared watchdog ucsi_acpi
+snd_pcm snd_acp_config amdxdna nf_conntrack hp_wmi typec_ucsi amd_pmf
+snd_soc_cs_amp_lib edac_mce_amd edac_core ecdh_generic hid_multitouch
+intel_rapl_msr sparse_keymap wmi_bmof evdev amd_atl intel_rapl_common
+ghash_clmulni_intel amdtee snd_timer i2c_algo_bit ecc rapl roles efi_pstore
+platform_profile tiny_power_button rtc_cmos video cs_dsp i2c_hid_acpi mac_hid
+i2c_hid serial_multi_instantiate snd gpu_sched amd_sfh snd_soc_acpi
+nf_defrag_ipv6 nf_defrag_ipv4 typec amd_isp4 rfkill wmi thermal snd_pci_acp3x
+battery wireless_hotkey crc16 soundcore i2c_piix4 button libarc4 i2c_smbus
+amd_pmc ac serio_raw k10temp ip6t_rpfilter ipt_rpfilter xt_pkttype xt_LOG
+nf_log_syslog xt_tcpudp nft_compat x_tables nf_tables sch_fq_codel kvm_amd ccp
+rng_core kvm loop irqbypass nfnetlink efivarfs dmi_sysfs autofs4 crc32c_cryptoapi
+dm_crypt encrypted_keys trusted asn1_encoder tee hid_generic input_leds
+led_class atkbd libps2 vivaldi_fmap aesni_intel nvme xhci_pci thunderbolt
+nvme_core xhci_hcd nvme_keyring nvme_auth hkdf i8042 serio vfat fat usbhid hid
+nls_iso8859_1 nls_cp437 dm_snapshot dm_bufio dm_mod btrfs blake2b libblake2b xor
+raid6_pq
+
+Note: amdgpu, mt76, mt76_connac_lib, mt792x_lib, mt7925_common, mt7925e,
+amd_pmf, pinctrl_amdisp, i2c_designware_amdisp all loaded.
+
+---- The corruption (Part 32 → Part 7) ----
+[  338.199472] [Right Redzone overwritten]
+              0xffff8a5a617b7000-0xffff8a5a617b7007 @offset=28672.
+              First byte 0x72 instead of 0xbb
+[  338.199608] =====================================================
+[  338.199656] BUG kmalloc-rnd-05-2k (Not tainted): Object corrupt
+[  338.199825] Slab 0xfffff5660485ec00 objects=5 used=5
+              fp=0xec5f0ddd7c9b4681 flags=0x17fffc000000240
+              (workingset|head|node=0|zone=2|lastcpupid=0x1ffff)
+[  338.199825] Object 0xffff8a5a617b6800 @offset=26624
+              fp=0xec5f0ddd7c9b4681
+
+Object body: full 2048 bytes of 0x6b (SLUB_RED_INACTIVE poison) — i.e. the
+object has been freed and poisoned cleanly. Last byte of object: 0xa5
+(SLUB_RED_ACTIVE end marker, immediately preceding the redzone).
+
+Right redzone (8 bytes — should all be 0xbb):
+  ffff8a5a617b7000: 72 1b 90 27 4f a3 19 04   r..'O...
+
+Padding past redzone is intact (0x5a everywhere) — so this was a single
+8-byte overwrite into the 8-byte right redzone, not a long buffer overrun.
+
+Decoded little-endian as u64: 0x0419a34f27901b72 — does NOT look like a
+kernel pointer (kernel pointers on x86_64 are 0xffff8x.... or 0xffffffff8x....)
+and does NOT look like a userspace pointer pattern. Looks closer to junk /
+DMA-streamed bytes than a stale stack/heap pointer.
+
+---- The detector (Part 6 → Part 1) ----
+[  338.239030] Disabling lock debugging due to kernel taint
+[  338.239044] ------------[ cut here ]------------
+[  338.239046] WARNING: mm/slub.c:1227 at object_err+0x1d7/0x1e5,
+              CPU#14: .quickshell-wra/2802
+...
+[  338.239299] CPU: 14 UID: 1000 PID: 2802 Comm: .quickshell-wra
+              Tainted: G    B   6.19.10 #1-NixOS PREEMPT(lazy)
+[  338.239305] Tainted: [B]=BAD_PAGE
+[  338.239309] Hardware name: HP HP ZBook Ultra G1a 14 inch Mobile
+              Workstation PC/8D01, BIOS X89 Ver. 01.03.02 06/18/2025
+RIP: 0010:object_err+0x1d7/0x1e5
+
+Call trace (the *detector*, not the producer):
+  object_err
+  check_bytes_and_report
+  check_object
+  alloc_debug_processing
+  get_partial_node
+  ___slab_alloc
+  __slab_alloc.isra.0
+  __kmalloc_cache_noprof
+  nd_alloc_stack          <-- VFS path-walk allocation
+  pick_link
+  step_into_slowpath
+  link_path_walk
+  path_lookupat
+  filename_lookup
+  vfs_statx
+  vfs_fstatat
+  __do_sys_newfstatat
+  do_syscall_64
+  entry_SYSCALL_64_after_hwframe
+
+Caller in userspace: `.quickshell-wra` PID 2802 doing `newfstatat` —
+i.e. quickshell did a stat() on a symlink chain that needed
+nd_alloc_stack to kmalloc(2K) for the symlink stack. The 2K slab it got
+back already had the corruption from a prior tenant. Detection happened
+at allocation time via slub_debug=FZP poisoning checks.
+
+[  338.239538] Kernel panic - not syncing: kernel: panic_on_warn set ...
+[  338.240529] Kernel Offset: 0x1f400000 from 0xffffffff81000000
+              (relocation range: 0xffffffff80000000-0xffffffffbfffffff)
+
+---- Verification of Test A pre-crash ----
+/proc/cmdline: ...consoleblank=0 slub_debug=FZP slab_nomerge panic_on_warn=1
+              softlockup_panic=1 panic_on_rcu_stall=1 rcu_cpu_stall_timeout=15
+              loglevel=4 lsm=landlock,yama,bpf
+/sys/bus/pci/devices/0000:c1:00.0/power/control: on
+=> Test A took effect. The runtime-PM wake path on the WiFi device was
+   not engaged for the duration of this boot, yet the system still crashed.
+
+---- /var/lib/systemd/pstore listing ----
+1777516867  Apr 29 21:41   <-- this dump (round 8 / Test A failure)
+1777512597  Apr 29 20:30   <-- round 7 dump
+1777502932  Apr 29 18:22
+1777502933  Apr 29 18:22
+1777478692  Apr 29 11:08
+1777478693  Apr 29 11:08
+1777460252  Apr 29 08:27
+1777458629  Apr 29 05:31

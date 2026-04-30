@@ -1,0 +1,613 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/Projects/nixos-config/main
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ Please read the chat log and notes from the most recent help session in       
+  help-sessions. I just ran that test, and the system crashed, disproving that  
+  hypothesis.                                                                   
+
+  Read 2 files, listed 2 directories (ctrl+o to expand)
+
+● I've read both the findings and actions. Let me check the chat log briefly for
+   any context I might be missing.
+
+  Read 1 file (ctrl+o to expand)
+
+● Test A failed. Let me check the current configuration and look for the new
+  crash dump before recommending Test B.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Got it — Test A (D0 pin on the MT7925 device) crashed too. That falsifies "the
+   runtime-PM wake path is the trigger" as a standalone explanation, or the D0
+  pin didn't stick. Before we move on, two things to check:
+
+● Bash(sudo ls -lat /var/lib/systemd/pstore/ 2>&1 | head -10)
+  ⎿  We trust you have received the usual lecture from the local System
+     Administrator. It usually boils down to these three things:
+     … +5 lines (ctrl+o to expand)
+
+● Bash(cat /proc/cmdline; echo '---'; cat
+      /sys/bus/pci/devices/0000:c1:00.0/power/control 2>&1; echo '---'; lsmod |
+      grep -E '^(amdgpu|mt7925e|mt7925_common|mt76|amd_pm…)
+  ⎿  initrd=\initramfs-linux.img cryptdevice=PARTUUID=ed3da2fb-ff22-4a75-84
+     63-2b132d30e628:root root=/dev/mapper/root zswap.enabled=0 rootflags=s
+     ubvol=@ rw rootfstype=btrfs
+     … +5 lines (ctrl+o to expand)
+
+● Important context — I'm running on an Arch box, not on wisp itself.
+  /proc/cmdline here is the Arch host, the MT7925 PCI path doesn't exist, and
+  pstore is empty. So I can't pull the new dump from here.
+
+  What we know now:
+
+  - Test A failed. D0 pin on 0000:c1:00.0 was supposed to block
+  mt792x_pm_wake_work from ever running. It crashed anyway.
+  - That falsifies "WiFi runtime-PM wake is the sole trigger" — if the pin
+  actually took effect at boot.
+
+  Two ways to interpret the failure, and they want different next steps:
+
+  1. D0 pin took effect, system still crashed → the wake path isn't the trigger;
+   mt76 RX corruption is happening on a different code path (steady-state RX,
+  not wake-from-sleep). Test B (pcie_aspm=off) is still worth running, but if it
+   also fails the producer hypothesis (mt76) needs to start including non-wake
+  paths.
+  2. D0 pin didn't take effect → tmpfiles ran too early / udev rule didn't match
+   / wrong PCI address on this revision. Then we haven't really tested the
+  hypothesis.
+
+  Before I edit the config to move to Test B, can you paste from wisp:
+
+  cat /proc/cmdline
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+  sudo ls -lat /var/lib/systemd/pstore/ | head -10
+
+  And the new pstore dump (001/dmesg.txt from the newest dir under
+  /var/lib/systemd/pstore/). The call trace is the deciding evidence — if it's
+  still mt792x_pm_wake_work → mt76_dma_rx_cleanup, the D0 pin didn't hold. If
+  it's a different mt76 path (or something unrelated), interpretation 1 is right
+   and we have new information.
+
+✻ Brewed for 1m 16s
+
+❯    cat /proc/cmdline                                                         
+                                                                                
+  initrd=\EFI\nixos\858grpvhx35w676kmk5gm6z7s0b7mbjq-initrd-linux-6.19.10-initr 
+  d.efi init=/nix/store/lcp7528rm4xn81sk7bb0h98gfydf5m76-nixos-system-wisp-26.0 
+  5.20260401.6201e20/init ttm.pages_limit=18874368 ttm.page_pool_size=18874368  
+  consoleblank=0 slub_debug=FZP slab_nomerge panic_on_warn=1 softlockup_panic=1 
+   panic_on_rcu_stall=1 rcu_cpu_stall_timeout=15 loglevel=4                     
+  lsm=landlock,yama,bpf                                                         
+                                                                                
+     cat /sys/bus/pci/devices/0000:c1:00.0/power/control                       
+                                                                                
+  on                                                                            
+                                                                                
+     sudo ls -lat /var/lib/systemd/pstore/ | head -10                          
+                                                                                
+  total 0                                                                       
+  drwxr-xr-x 1 root root   6 Apr 29 21:41 1777516867                            
+  drwxr-xr-x 1 root root 960 Apr 29 21:41 .                                     
+  drwxr-xr-x 1 root root   6 Apr 29 20:30 1777512597                            
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502932                            
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502933                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478692                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478693                            
+  drwxr-xr-x 1 root root   6 Apr 29 08:27 1777460252                            
+  drwxr-xr-x 1 root root   6 Apr 29 05:31 1777458629                            
+                                                                                
+   sudo cat /var/lib/systemd/pstore/1777516867/001/dmesg.txt                   
+  Panic#1 Part34                                                                
+  <6>[   23.222452] amdgpu 0000:c3:00.0: amdgpu: Runtime PM not available       
+  <6>[   23.223016] amdgpu 0000:c3:00.0: amdgpu: [drm] Using custom brightness  
+  curve                                                                         
+  <6>[   23.224124] amdgpu 0000:c3:00.0: [drm] Registered 4 planes with drm     
+  panic                                                                         
+  <6>[   23.224125] [drm] Initialized amdgpu 3.64.0 for 0000:c3:00.0 on minor 1 
+  <6>[   23.234613] fbcon: amdgpudrmfb (fb0) is primary device                  
+  <6>[   23.234960] [drm] pre_validate_dsc:1667 MST_DSC dsc precompute is not   
+  needed                                                                        
+  <6>[   23.244190] tun: Universal TUN/TAP device driver, 1.6                   
+  <6>[   24.218686] Console: switching to colour frame buffer device 180x56     
+  <6>[   24.228647] amdgpu 0000:c3:00.0: [drm] fb0: amdgpudrmfb frame buffer    
+  device                                                                        
+  <6>[   25.969000] wlp193s0: authenticate with 62:a4:b7:5c:51:d3 (local        
+  address=8c:8b:5b:0e:8c:8b)                                                    
+  <6>[   26.322659] wlp193s0: send auth to 62:a4:b7:5c:51:d3 (try 1/3)          
+  <6>[   26.326230] wlp193s0: authenticated                                     
+  <6>[   26.329591] wlp193s0: associate with 62:a4:b7:5c:51:d3 (try 1/3)        
+  <6>[   26.347836] wlp193s0: RX AssocResp from 62:a4:b7:5c:51:d3 (capab=0x1011 
+   status=0 aid=11)                                                             
+  <6>[   26.393048] wlp193s0: associated                                        
+  <7>[   26.577518] wlp193s0: Limiting TX power to 30 (30 - 0) dBm as           
+  advertised by 62:a4:b7:5c:51:d3                                               
+  <4>[   28.511596] Unknown laptop placement                                    
+  <6>[   30.426272] hid-generic 0020:1022:0001.0007: hidraw2: SENSOR HUB HID    
+  v0.00 Device [hid-amdsfh 1022:0001] on pcie_mp2_amd                           
+  <6>[   30.426695] hid-generic 0020:1022:0001.0008: hidraw3: SENSOR HUB HID    
+  v0.00 D                                                                       
+  ──── (517 lines hidden) ───────────────────────────────────────────────────── 
+  8a5a617b6800 R08: 0000000000000000 R09: 00000000ffffdfff                      
+  <4>[  338.239628] R10: ffffffffa24613a0 R11: ffffcaa3c3f27718 R12:            
+  ffff8a5a617b0000                                                              
+  <4>[  338.239630] R13: fffff5660485ec00 R14: ffff8a5a4004e0c0 R15:            
+  fffff5660485ec00                                                              
+  <4>[  338.239633]  ? object_err+0x1d6/0x1e5                                   
+  <4>[  338.239636]  check_bytes_and_report.cold+0x4d/0x6b                      
+  <4>[  338.239639]  check_object+0x1ca/0x3b0                                   
+  <4>[  338.239643]  alloc_debug_processing+0xa6/0x100                          
+  <4>[  338.239645]  get_partial_node+0x198/0x300                               
+  <4>[  338.239647]  ___slab_alloc+0x5bf/0xdc0                                  
+  <4>[  338.239650]  ? ep_done_scan+0x100/0x150                                 
+  <4>[  338.239652]  ? nd_alloc_stack+0x76/0x180                                
+  <4>[  338.239656]  __slab_alloc.isra.0+0x2b/0x60                              
+  <4>[  338.239658]  __kmalloc_cache_noprof+0x2e7/0x5e0                         
+  <4>[  338.239660]  ? __filemap_get_folio_mpol+0x3f/0x370                      
+  <4>[  338.239663]  ? current_time+0x3e/0x120                                  
+  Panic#1 Part1                                                                 
+  <4>[  338.239665]  ? nd_alloc_stack+0x76/0x180                                
+  <4>[  338.239667]  nd_alloc_stack+0x76/0x180                                  
+  <4>[  338.239670]  pick_link+0x374/0x450                                      
+  <4>[  338.239673]  step_into_slowpath+0x17e/0x3d0                             
+  <4>[  338.239676]  link_path_walk+0x3de/0x630                                 
+  <4>[  338.239679]  path_lookupat+0x40/0x2a0                                   
+  <4>[  338.239681]  filename_lookup+0xf7/0x200                                 
+  <4>[  338.239685]  ? __pfx_page_put_link+0x10/0x10                            
+  <4>[  338.239687]  ? __pfx_page_put_link+0x10/0x10                            
+  <4>[  338.239690]  ? cp_new_stat+0x130/0x170                                  
+  <4>[  338.239692]  vfs_statx+0x7a/0x160                                       
+  <4>[  338.239694]  ? strncpy_from_user+0x30/0x110                             
+  <4>[  338.239697]  vfs_fstatat+0x6b/0xa0                                      
+  <4>[  338.239699]  __do_sys_newfstatat+0x3b/0x80                              
+  <4>[  338.239702]  do_syscall_64+0xb6/0x560                                   
+  <4>[  338.239704]  entry_SYSCALL_64_after_hwframe+0x77/0x7f                   
+  <4>[  338.239707] RIP: 0033:0x7f3168713aae                                    
+  <4>[  338.239710] Code: 83 0e 00 f7 d8 64 89 02 b8 ff ff ff ff 31 d2 31 c9 31 
+   f6 31 ff 45 31 db c3 0f 1f 00 f3 0f 1e fa 41 89 ca b8 06 01 00 00 0f 05 <3d> 
+   00 f0 ff ff 77 1b 31 c0 31 d2 31 c9 31 f6 31 ff 45 31 d2 45 31               
+  <4>[  338.239713] RSP: 002b:00007fffcd34cc48 EFLAGS: 00000246 ORIG_RAX:       
+  0000000000000106                                                              
+  <4>[  338.239715] RAX: ffffffffffffffda RBX: 00007f31687c54a9 RCX:            
+  00007f3168713aae                                                              
+  <4>[  338.239717] RDX: 00007fffcd34cce0 RSI: 00007f31687c54a9 RDI:            
+  00000000ffffff9c                                                              
+  <4>[  338.239719] RBP: 00007fffcd34cdb0 R08: 0000000000000000 R09:            
+  0000000000000000                                                              
+  <4>[  338.239721] R10: 0000000000000000 R11: 0000000000000246 R12:            
+  0000000000000001                                                              
+  <4>[  338.239722] R13: 0000000000000000 R14: 0000000000000000 R15:            
+  0000000000000000                                                              
+  <4>[  338.239725]  </TASK>                                                    
+  <0>[  338.240529] Kernel Offset: 0x1f400000 from 0xffffffff81000000           
+  (relocation range: 0xffffffff80000000-0xffffffffbfffffff)                     
+
+● Test A actually changed the failure signature — that's important data. The new
+   oops is not the mt76 page_pool/wake-path crash from round 7. It's a different
+   producer that was being preempted by the wake-path bug.
+
+  What changed
+
+  ┌───────────┬──────────────────────────┬─────────────────────────────────┐
+  │           │   Round 7 (no D0 pin)    │      Round 8 (D0 pin held)      │
+  ├───────────┼──────────────────────────┼─────────────────────────────────┤
+  │ Uptime to │ 312s                     │ 338s                            │
+  │  crash    │                          │                                 │
+  ├───────────┼──────────────────────────┼─────────────────────────────────┤
+  │ Detector  │ panic_on_warn on         │ slub_debug redzone check        │
+  │           │ pp_magic mismatch        │                                 │
+  ├───────────┼──────────────────────────┼─────────────────────────────────┤
+  │ Site      │ mt76_dma_rx_cleanup from │ nd_alloc_stack/pick_link        │
+  │           │  mt792x_pm_wake_work     │ (random VFS allocation)         │
+  ├───────────┼──────────────────────────┼─────────────────────────────────┤
+  │ Victim    │ page_pool netmem         │ kmalloc-2k right redzone,       │
+  │           │                          │ 8-byte overwrite past freed obj │
+  ├───────────┼──────────────────────────┼─────────────────────────────────┤
+  │ Bytes     │ corrupted pp_magic       │ 72 1b 90 27 4f a3 19 04         │
+  └───────────┴──────────────────────────┴─────────────────────────────────┘
+
+  /sys/bus/pci/devices/0000:c1:00.0/power/control = on and the kernel cmdline is
+   right, so the D0 pin took effect. With the WiFi runtime-PM wake path blocked,
+   the system survived ~6 seconds longer — and then crashed on a different
+  corruption pattern. Same mt7925 modules loaded, same amdgpu loaded, same
+  pinctrl_amdisp/i2c_designware_amdisp (which the historical PASS/FAIL pinned as
+   part of the FAIL set) loaded.
+
+  What that means
+
+  - Round 7's hypothesis "the runtime-PM wake handler is the trigger" is partly
+  falsified: the wake handler was one code path through which mt76 (or an
+  adjacent driver) was hitting bad memory, but it isn't the sole producer. With
+  it gone, a different victim shows up.
+  - The corruption is happening in steady state, not just at wake. That's new
+  and more useful.
+  - Detector is on the consumer side (someone else's kmalloc(2K) lands on a slab
+   whose previous resident's right redzone got smashed). The producer is whoever
+   wrote those 8 bytes past the end of a freed 2K allocation. mt76 RX skbuffs in
+   the 2K range are a plausible candidate; amdgpu/amd_pmf surfaces are another.
+
+  Proposal — keep D0 pin, layer Test B on top
+
+  Round 7's plan said "if A fails, revert A and run B." I'd revise: keep A, add 
+  B. Reasoning: A demonstrably suppressed one failure path, so reverting it just
+   makes round-9 noisier. Layer them.
+
+  Concretely, in hosts/wisp/configuration.nix:
+  - Keep the tmpfiles + udev D0-pin rules
+  - Add "pcie_aspm=off" to boot.kernelParams
+
+  This rules out PCIe L1 entry/exit as the DMA-corruption trigger while keeping
+  the wake-path neutralization. If round 9 is clean, we peel D0 pin first to see
+   whether ASPM-off alone is sufficient. If round 9 crashes again, we move to
+  Test C (pin amdgpu DPM) — also kept on top of A+B.
+
+  Want me to:
+
+  1. Create the round-8 session dir, save this oops + findings + actions, and
+  apply Test B on top of A?
+  2. Or first hear pushback / a different direction (e.g., shortcut to
+  module_blacklist=mt7925e,mt7925_common and lose WiFi to confirm mt76 is the
+  producer)?
+
+✻ Cogitated for 1m 29s
+
+❯ (1) yes, please proceed                                                       
+
+● Bash(date -u +'%Y-%m-%dT%H%M%SZ')
+  ⎿  2026-04-30T025055Z
+
+● Bash(mkdir -p /home/nullcopy/Projects/nixos-config/main/help-sessions/help-ses
+      sion-2026-04-30T025055Z)
+  ⎿  Done
+
+● Write(help-sessions/help-session-2026-04-30T025055Z/oops-0241Z.txt)
+  ⎿  Wrote 157 lines to
+     help-sessions/help-session-2026-04-30T025055Z/oops-0241Z.txt
+       2 Captured after Test A (D0 pin on 0000:c1:00.0) was applied and v
+         erified live.
+         re numbering,elow in chronological order (Part1 = oldest in psto
+       4 but it actually contains the panic itself; pstore writes parts b
+         ack-to-front).
+       6 Re-ordered here Part18 → Part1 (boot → panic).
+       7 ---- Part 18 → Part 6 (boot, module load, ~5 min of normal opera
+       8 ... pre-panic boot noise; key lines:
+       9 
+      10 amdgpu 0000:c3:00.0: amdgpu: Runtime PM not available
+     … +200 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-30T025055Z/findings.md)
+  ⎿  Wrote 230 lines to
+     help-sessions/help-session-2026-04-30T025055Z/findings.md
+      2 name: Help session findings — round 8 (D0 pin held, signature cha
+      3 description: Test A (D0 pin on the MT7925 PCIe device) took effec
+        t but did not stop the crash. New oops is a different signature —
+         detected by an unrelated VFS allocation. Producer/gating split s
+        urvives but the producer is hitting memory in steady state, not j
+      4 type: projectwake handler.
+      6 ---
+      7 # Help session findings — round 8
+      9 Continuation of crash triage on wisp (HP ZBook Ultra G1a 14" / AM
+        D Strix Halo).
+     … +270 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-30T025055Z/actions.md)
+  ⎿  Wrote 158 lines to
+     help-sessions/help-session-2026-04-30T025055Z/actions.md
+      2 name: actions — wisp crash triage, round 8 (Test A held + Test B 
+        layered)
+      3 description: What was done in round 8 (D0 pin retained, pcie_aspm
+        =off added) and what the user needs to do next
+      4 type: project
+      5 ---
+      6 
+      7 # actions — wisp crash triage, round 8
+      8 
+      9 ## Done this session (2026-04-30 UTC)
+     … +178 lines (ctrl+o to expand)
+
+● Now updating hosts/wisp/configuration.nix — adding pcie_aspm=off to
+  kernelParams and refreshing the comment block to reflect round 8.
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 44 lines, removed 28 lines
+      18    boot.loader.efi.canTouchEfiVariables = true;
+      19    boot.kernelPackages = pkgs.linuxPackages_latest;
+      20  
+      21 -  # Crash triage — see help-sessions/help-session-2026-04-30T02
+         -2503Z/.                                                        
+      21 +  # Crash triage — latest: help-sessions/help-session-2026-04-3
+         +0T025055Z/.                                                    
+      22    #
+      23 -  # Round 7 (refined). Producer/gating split:                  
+      24 -  #  - Producer: mt76. pstore from the most recent crash (uptim
+         -e 312s)                                                        
+      25 -  #    shows panic_on_warn=1 tripping a page_pool pp_magic chec
+         -k inside                                                       
+      26 -  #    mt76_dma_rx_cleanup, called from mt792x_pm_wake_work — t
+         -he WiFi                                                        
+      27 -  #    runtime-PM wake handler doing a DMA reset.              
+      28 -  #  - Gating condition: amdgpu loaded. amdgpu pulls in amd_pmf
+         - and                                                           
+      29 -  #    smu_v14_0_0 and changes platform PM state on Strix Halo,
+         - which is                                                      
+      30 -  #    what lets the WiFi chip enter MCU power-save and run the
+         - buggy                                                         
+      31 -  #    wake path. With amdgpu off, the chip never sleeps deep e
+         -nough,                                                         
+      32 -  #    so the wake path doesn't fire and no WARN. TTY hits deep
+         -er idle                                                        
+      33 -  #    than Wayland, which is why the bug only reproduces in TT
+         -Y.                                                             
+      23 +  # Round 8 (Test A held, signature changed → layer Test B):   
+      24 +  #  - Test A (D0 pin on the MT7925 PCIe device, applied round 
+         +7) took                                                        
+      25 +  #    effect: power/control = on, no module_blacklist, all saf
+         +ety                                                            
+      26 +  #    params live. System still crashed at uptime 338s (≈6s lo
+         +nger                                                           
+      27 +  #    than the round-7 312s reference).                       
+      28 +  #  - The new oops is **not** the mt76 page_pool / wake-handle
+         +r crash.                                                       
+      29 +  #    It's slub_debug=FZP catching an 8-byte right-redzone ove
+         +rwrite                                                         
+      30 +  #    on a freed kmalloc-2k object. Detected by an unrelated V
+         +FS                                                             
+      31 +  #    allocation in nd_alloc_stack from .quickshell-wra doing 
+      32 +  #    newfstatat — quickshell is the detector, not the produce
+         +r.                                                             
+      33 +  #  - Conclusion: D0 pin suppressed *one* failure path (the wa
+         +ke                                                             
+      34 +  #    handler), but a steady-state corruption is still happeni
+         +ng from                                                        
+      35 +  #    a different producer / different code path. Don't revert
+         + A —                                                           
+      36 +  #    layer B on top.                                         
+      37    #
+      35 -  # Test A (this revision): pin the WiFi PCIe device to D0 so i
+         -t never                                                        
+      36 -  # enters runtime-PM sleep. Most surgical knob — no module bla
+         -cklist,                                                        
+      37 -  # no global ASPM change, amdgpu stays loaded. Soak in TTY ≥30
+         - min.                                                          
+      38 -  # If clean, this is the live mitigation and we file upstream 
+         -against                                                        
+      39 -  # mt76/mt7925.                                               
+      40 -  # If it still crashes, drop these rules and try Test B       
+      41 -  # (boot.kernelParams += "pcie_aspm=off"), then Test C (pin am
+         -dgpu DPM                                                       
+      42 -  # to high), then the round-6 fallback (module_blacklist=mt792
+         -5e,mt7925_common).                                             
+      38 +  # Test B (this revision): keep the D0 pin AND add pcie_aspm=o
+         +ff to                                                          
+      39 +  # rule out PCIe L0s/L1 link-state transitions as the couplant
+         + for                                                           
+      40 +  # whatever DMA / memcpy is overrunning a 2K allocation. Soak 
+         +in TTY                                                         
+      41 +  # ≥30 min.                                                   
+      42 +  # Outcomes:                                                  
+      43 +  #   - clean → live mitigation = D0 pin + pcie_aspm=off. Round
+         + 9 then                                                        
+      44 +  #     tries peeling the D0 pin alone to see whether ASPM-off 
+         +is                                                             
+      45 +  #     sufficient.                                            
+      46 +  #   - crashes → keep A+B, layer Test C (pin amdgpu DPM to hig
+         +h via a                                                        
+      47 +  #     second tmpfiles rule on                                
+      48 +  #     /sys/class/drm/card1/device/power_dpm_force_performance
+         +_level).                                                       
+      49 +  #   - all of A+B+C fail → fall back to round-6 plan          
+      50 +  #     (module_blacklist=mt7925e,mt7925_common). WiFi+BT off; 
+         +ethernet                                                       
+      51 +  #     via dock. We'd still file upstream against mt76 with th
+         +e                                                              
+      52 +  #     full pstore evidence pack.                             
+      53    #
+      54    # Watchdog-panic + slub_debug params stay on as a safety net 
+          through
+      45 -  # the test cycle. They caught this oops; they need to keep ca
+         -tching                                                         
+      46 -  # the next one if Test A doesn't hold.                       
+      55 +  # the test cycle. They caught both the round-7 and round-8 oo
+         +pses;                                                          
+      56 +  # peeling is later, after a clean week.                      
+      57    #
+      48 -  # Historical PASS/FAIL table (TTY soaks, this round):        
+      58 +  # Historical PASS/FAIL table (round-7 TTY soaks, all without 
+         +D0 pin /                                                       
+      59 +  # without pcie_aspm=off):                                    
+      60    #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+          _pmf,amdgpu  PASS
+      61    #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd
+          gpu          PASS
+      62    #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp    
+                       FAIL
+      63    #   module_blacklist=amdgpu                                  
+                       PASS
+      53 -  #   module_blacklist=                                        
+         -             FAIL  ← dump captured here                        
+      64 +  #   module_blacklist=                                        
+         +             FAIL  ← round-7 dump                              
+      65 +  # Round 8 (D0 pin + no module_blacklist):                    
+         +             FAIL  ← round-8 dump (different signature)        
+      66    boot.kernelParams = [
+      67      "consoleblank=0"
+      68      "slub_debug=FZP"
+     ...
+      71      "softlockup_panic=1"
+      72      "panic_on_rcu_stall=1"
+      73      "rcu_cpu_stall_timeout=15"
+      74 +    "pcie_aspm=off"                                            
+      75    ];
+      76  
+      64 -  # Test A: keep the WiFi PCIe device (MT7925 @ 0000:c1:00.0) i
+         -n D0 so                                                        
+      65 -  # mt792x_pm_wake_work — the path that crashed at uptime 312s 
+         -— never                                                        
+      66 -  # runs. tmpfiles writes the value at boot; the udev rule reap
+         -plies it                                                       
+      67 -  # if the device re-enumerates (e.g. after a PCI rescan).     
+      77 +  # Test A (kept from round 7): pin the WiFi PCIe device       
+      78 +  # (MT7925 @ 0000:c1:00.0) to D0 so mt792x_pm_wake_work — the 
+         +path                                                           
+      79 +  # that crashed at uptime 312s in round 7 — never runs. Holds 
+         +across                                                         
+      80 +  # round 8 because the round-8 signature is different (and rev
+         +erting                                                         
+      81 +  # this would re-expose the round-7 wake-path crash). tmpfiles
+         + writes                                                        
+      82 +  # the value at boot; the udev rule reapplies it if the device
+      83 +  # re-enumerates (e.g. after a PCI rescan).                   
+      84    systemd.tmpfiles.rules = [
+      85      "w /sys/bus/pci/devices/0000:c1:00.0/power/control - - - - 
+          on"
+      86    ];
+  Read 1 file (ctrl+o to expand)
+
+● Round 8 set up. Summary:
+
+  - New session dir: help-sessions/help-session-2026-04-30T025055Z/ with
+  oops-0241Z.txt (reassembled pstore), findings.md, actions.md.
+  - hosts/wisp/configuration.nix — kept the D0 pin, added pcie_aspm=off to
+  boot.kernelParams, refreshed the comment block to reflect the round-8
+  signature shift.
+
+  What to do next on wisp:
+
+  sudo nixos-rebuild switch --flake .#wisp
+  sudo reboot
+
+  After boot, drop into TTY and verify:
+
+  cat /proc/cmdline                        # should now contain pcie_aspm=off
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control   # on
+  lspci -vvv -s 0000:c1:00.0 | grep -A1 LnkCtl          # ASPM Disabled
+  lsmod | grep -E '^(amdgpu|mt7925e|mt7925_common|mt76|amd_pmf)'
+
+  Soak ≥30 min. If clean, round 9 will peel the D0 pin to test whether
+  pcie_aspm=off alone holds. If it crashes, paste the new pstore from
+  /var/lib/systemd/pstore/<newest>/001/dmesg.txt and we layer Test C (amdgpu DPM
+   pin) on top.
+
+✻ Sautéed for 4m 35s
+
+❯ What is pcie_aspm, and what could be some negative sideeffects of having it   
+  disabled?                                                                     
+
+● What pcie_aspm is
+
+  PCIe ASPM = Active State Power Management. It's a PCIe link-level power-saving
+   feature defined in the PCIe spec. Each PCIe link (CPU/root-complex ↔
+  endpoint) can be in one of:
+
+  - L0 — fully active, both directions transmitting.
+  - L0s — one direction idle, low-latency exit (~ns).
+  - L1 — both directions idle, deeper savings, slower exit (~µs).
+  - L1.1 / L1.2 ("L1 substates") — even deeper, with reference clock and/or
+  common-mode voltage off; exit on the order of tens of µs to a few ms.
+
+  The hardware autonomously moves between L0/L0s/L1/L1.x when traffic is idle,
+  then back to L0 on demand. The Linux pcie_aspm kernel parameter controls
+  policy:
+
+  - pcie_aspm=default — follow firmware/ACPI hints
+  - pcie_aspm=force — enable ASPM regardless of what firmware says
+  - pcie_aspm=off — disable ASPM globally; all links stay at L0
+  - (related: pcie_aspm.policy=performance|powersave|powersupersave)
+
+  pcie_aspm=off doesn't disable PCIe runtime D-states (D3hot, D3cold) or the
+  device-side runtime PM — those are independent. It only forbids the link-state
+   transitions.
+
+  Why we're toggling it for this bug
+
+  L1/L1.x exit on AMD platforms (Ryzen/Strix) has historically been a frequent
+  source of races with in-flight DMA: a device de-asserts CLKREQ#, the link
+  starts entering L1, then a late DMA scheduling pokes it. On poorly-tuned
+  silicon or buggy endpoints this can corrupt a few bytes — exactly the shape of
+   round 8's 8-byte right-redzone overwrite. So pcie_aspm=off is a clean way to
+  remove that variable from the experiment.
+
+  Negative side-effects of pcie_aspm=off
+
+  Trading off power for stability. On a laptop, the costs land in roughly this
+  order of impact:
+
+  1. Battery life regression — biggest hit. ASPM is one of the heavier-weight
+  knobs in the platform's power budget on modern laptops. Real-world impact on
+  idle/light-load battery is typically 5–25% depending on the system; on Strix
+  Halo with a lot of PCIe-attached IP (NVMe, WiFi, iGPU root ports, USB
+  controllers, Thunderbolt), expect to feel it. Idle wattage measured via
+  powertop / intel_pstate-equivalent will rise visibly.
+  2. Higher idle temperature / fan ramp. Links staying in L0 means the SerDes /
+  PHYs draw their full active power continuously. Modest CPU-package and
+  skin-temp delta — usually a few °C, occasionally enough to nudge the fan curve
+   up a notch.
+  3. Worse deep-sleep behavior. ASPM L1.x is part of how the platform reaches
+  its lowest package C-states (PC8/PC10) and thus the lowest "modern standby" /
+  s2idle floors. With ASPM off, the SoC can be held out of the deepest residency
+   states — measurable on cpupower idle-info and by observing higher s2idle
+  drain. Suspend-to-RAM still works, but s2idle "lid closed in a bag overnight"
+  will drain faster.
+  4. No correctness regressions on healthy hardware. Throughput, latency,
+  interrupt rate — all unaffected (and link latency is nominally better since
+  you skip exit cost). You will not lose features, devices will not enumerate
+  differently, and nothing should fail to work; this is purely "device runs
+  hotter and uses more power."
+  5. Specific to this bug: if pcie_aspm=off fixes the corruption, that's
+  diagnostic value but it's also a heavy hammer. Two more-targeted options exist
+   as future refinements:
+    - pcie_aspm.policy=performance — keeps ASPM available but biases toward L0
+  unless idle is sustained.
+    - Per-device disable via sysfs (/sys/bus/pci/devices/.../link/l1_aspm etc.)
+  — disable just on the offending endpoint(s).
+
+  We're using the global form for now because it's the cleanest diagnostic; if
+  it works, we can later narrow it to a per-device knob to claw back the battery
+   cost.
+
+  For the duration of the test cycle (one boot + a 30-minute soak), the cost is
+  negligible. For a long-term mitigation we'd want to scope it down once the
+  producer is identified.
+
+✻ Brewed for 31s
+
+❯ Ok, makes sense. Remind me what you want me to do                             
+
+● What to do on wisp
+
+  1. Rebuild and reboot:
+  sudo nixos-rebuild switch --flake .#wisp
+  sudo reboot
+  2. After boot, log in to a TTY (Ctrl-Alt-F2, or just don't start a Wayland
+  session). Verify Test A + Test B both took effect:
+  cat /proc/cmdline
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+  lspci -vvv -s 0000:c1:00.0 | grep -A1 LnkCtl
+  lsmod | grep -E '^(amdgpu|mt7925e|mt7925_common|mt76|amd_pmf)'
+  2. Expect:
+    - /proc/cmdline contains pcie_aspm=off plus the existing safety params, no
+  module_blacklist.
+    - power/control prints on.
+    - LnkCtl shows ASPM Disabled.
+    - lsmod shows amdgpu and the mt7925 family loaded.
+  3. Soak in TTY ≥30 min. Crash hit at 338s last time, so 30 min is a
+  comfortable margin. Bug fires from idle, so just leaving it sitting there is
+  the worst case. WiFi/BT should remain usable.
+  4. After the soak, paste back:
+  sudo ls -lat /var/lib/systemd/pstore/ | head -10
+  sudo journalctl -k -b -1 --no-pager > /tmp/wisp-prevboot.log; wc -l
+  /tmp/wisp-prevboot.log
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+  cat /proc/cmdline
+  4. If a new pstore dir appeared, attach its 001/dmesg.txt here as
+  oops-<HHMM>Z.txt.
+
+  Outcomes
+
+  - Clean ≥30 min → mitigation = D0 pin + pcie_aspm=off. Round 9 then peels the
+  D0 pin to see if ASPM-off alone is sufficient.
+  - Crashes → we layer Test C (pin amdgpu DPM to high) on top.
+  - Different new oops → capture and we treat it on its own.
