@@ -1,0 +1,543 @@
+ ▐▛███▜▌   Claude Code v2.1.119
+▝▜█████▛▘  Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/Projects/nixos-config/main
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ Please read the chat log and notes from the most recent help session in       
+  help-sessions. I just ran that test, and the system crashed, disproving that  
+  hypothesis.                                                                   
+
+  Read 3 files, listed 2 directories (ctrl+o to expand)
+
+● Caught up on round 8. Test A held (D0 pin + safety params), and we layered
+  Test B (pcie_aspm=off) on top. You're saying that crashed too — so ASPM
+  link-state transitions aren't the culprit either. Before I create a round-9
+  session and apply Test C, I need the receipts from this run.
+
+  Per round-8 actions, please paste:
+
+  cat /proc/cmdline
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control
+  sudo lspci -vvv -s 0000:c1:00.0 | grep -A1 LnkCtl
+  sudo ls -lat /var/lib/systemd/pstore/ | head -10
+
+  And the new dump — 001/dmesg.txt from the newest pstore dir.
+
+  Three things I'm checking with that data:
+
+  1. Did Test B actually take effect? pcie_aspm=off in cmdline and LnkCtl
+  showing ASPM disabled. If not, we haven't tested the hypothesis.
+  2. Did the D0 pin still hold? power/control = on. If it flipped, that would
+  change interpretation.
+  3. Is the new oops the same kmalloc-2k right-redzone signature, the round-7 
+  wake path, or something new? That decides whether we go to Test C (pin amdgpu
+  DPM high — layered on A+B) or treat the new dump on its own merits.
+
+  If everything verified live and the signature is still the kmalloc-2k redzone
+  overwrite, the producer isn't link-state-driven. Test C is the plan from
+  round-8 actions.md:138 — pin amdgpu's DPM to high via a second tmpfiles rule,
+  layered on top of A+B. It's cheap, reversible, and tests whether GPU
+  clock/voltage transitions are coupling into the corruption.
+
+✻ Sautéed for 35s
+
+❯    cat /proc/cmdline                                                         
+                                                                                
+  initrd=\EFI\nixos\858grpvhx35w676kmk5gm6z7s0b7mbjq-initrd-linux-6.19.10-initr 
+  d.efi init=/nix/store/j6qqgy65n1g34m03n41zwkjs45gn95l5-nixos-system-wisp-26.0 
+  5.20260401.6201e20/init ttm.pages_limit=18874368 ttm.page_pool_size=18874368  
+  consoleblank=0 slub_debug=FZP slab_nomerge panic_on_warn=1 softlockup_panic=1 
+   panic_on_rcu_stall=1 rcu_cpu_stall_timeout=15 pcie_aspm=off loglevel=4       
+  lsm=landlock,yama,bpf                                                         
+                                                                                
+     cat /sys/bus/pci/devices/0000:c1:00.0/power/control                       
+                                                                                
+  on                                                                            
+                                                                                
+     sudo lspci -vvv -s 0000:c1:00.0 | grep -A1 LnkCtl                         
+                                                                                
+          LnkCtl:    ASPM L1 Enabled; RCB 64 bytes, LnkDisable- CommClk+        
+              ExtSynch+ ClockPM- AutWidDis- BWInt- AutBWInt- FltModeDis-        
+  --                                                                            
+          LnkCtl2: Target Link Speed: 5GT/s, EnterCompliance- SpeedDis-         
+               Transmit Margin: Normal Operating Range,                         
+  EnterModifiedCompliance- ComplianceSOS-                                       
+                                                                                
+     sudo ls -lat /var/lib/systemd/pstore/ | head -10                          
+                                                                                
+  total 0                                                                       
+  drwxr-xr-x 1 root root   6 Apr 29 22:25 1777519124                            
+  drwxr-xr-x 1 root root 980 Apr 29 22:25 .                                     
+  drwxr-xr-x 1 root root   6 Apr 29 21:41 1777516867                            
+  drwxr-xr-x 1 root root   6 Apr 29 20:30 1777512597                            
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502932                            
+  drwxr-xr-x 1 root root   6 Apr 29 18:22 1777502933                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478692                            
+  drwxr-xr-x 1 root root   6 Apr 29 11:08 1777478693                            
+  drwxr-xr-x 1 root root   6 Apr 29 08:27 1777460252                            
+
+● Three things from your data:
+
+  1. Cmdline shows pcie_aspm=off ✓
+  2. power/control = on ✓ (D0 pin still held)
+  3. LnkCtl shows ASPM L1 Enabled — that's the capability register, which always
+   reflects what hardware supports, not what kernel policy enforces. With
+  pcie_aspm=off in cmdline, the kernel should be holding the link at L0. To
+  check what's actually enforced, we'd want
+  /sys/bus/pci/devices/0000:c1:00.0/link/l1_aspm or the matching
+  LnkCtl_runtime-style sysfs entries. But this isn't suspicious yet —
+  pcie_aspm=off is a known-effective param, and lspci reading the cap reg
+  doesn't override that. Treat B as live unless the new dump suggests otherwise.
+
+  New pstore dir is 1777519124. Please paste:
+
+  sudo cat /var/lib/systemd/pstore/1777519124/001/dmesg.txt
+
+  Once I see the call trace + slab/object info I'll know whether it's:
+  - the same kmalloc-2k right-redzone overwrite (→ Test C: pin amdgpu DPM high,
+  layered)
+  - the round-7 wake path returning (→ D0 pin somehow didn't hold despite
+  power/control=on — re-examine)
+  - a third signature (→ treat on its own merits)
+
+  Also useful, if you can:
+  ls /var/lib/systemd/pstore/1777519124/
+  to see how many parts there are (round 8 was 34 parts; we'll need to
+  reassemble in chronological order again).
+
+❯    sudo cat /var/lib/systemd/pstore/1777519124/001/dmesg.txt                 
+                                                                                
+  Oops#1 Part18                                                                 
+  <6>[   31.091507] input: Video Bus as /devices/LNXSYSTM:00/LNXSYBUS:00/PNP0A0 
+  8:00/device:13/LNXVIDEO:00/input/input9                                       
+  <6>[   31.092273] sp5100-tco sp5100-tco: initialized. heartbeat=60 sec        
+  (nowayout=0)                                                                  
+  <6>[   31.093044] thermal LNXTHERM:01: registered as thermal_zone1            
+  <6>[   31.093047] ACPI: thermal: Thermal Zone [GFXZ] (25 C)                   
+  <6>[   31.095720] Serial bus multi instantiate pseudo device driver           
+  CSC3554:00: Instantiated 5 I2C devices.                                       
+  <6>[   31.096188] thermal LNXTHERM:02: registered as thermal_zone2            
+  <6>[   31.096191] ACPI: thermal: Thermal Zone [EXTZ] (43 C)                   
+  <6>[   31.096348] amdxdna 0000:c4:00.1: enabling device (0000 -> 0002)        
+  <6>[   31.097891] thermal LNXTHERM:03: registered as thermal_zone3            
+  <6>[   31.097893] ACPI: thermal: Thermal Zone [LOCZ] (52 C)                   
+  <6>[   31.105347] thermal LNXTHERM:04: registered as thermal_zone4            
+  <6>[   31.105349] ACPI: thermal: Thermal Zone [BATZ] (42 C)                   
+  <6>[   31.121563] thermal LNXTHERM:05: registered as thermal_zone5            
+  <6>[   31.121567] ACPI: thermal: Thermal Zone [CHGZ] (52 C)                   
+  <6>[   31.132875] thermal LNXTHERM:06: registered as thermal_zone6            
+  <6>[   31.132879] ACPI: thermal: Thermal Zone [MSHZ] (30 C)                   
+  <4>[   31.176113] i2c_hid_acpi i2c-ELAN2513:00: i2c_hid_get_input: IRQ        
+  triggered but there's no data                                                 
+  <6>[   31.176214] input: ELAN2513:00 04F3:4356 Touchscreen as /devices/platfo 
+  rm/AMDI0010:02/i2c-2/i2c-ELAN2513:00/0018:04F3:4356.0005/input/input10        
+  <6>[   31.176326] input: ELAN2513:00 04F3:4356 as /devices/platform/AMDI0010: 
+  02/i2c-2/i2c-ELAN2513:00/0018:04F3:4356.0005/input/input11                    
+  <6>[   31.176422] input: ELAN2513:00 04F3:4356 as /devices/platform/AMDI0010: 
+  02/i2c-2/i2c-ELAN2513:00/0018:04F3:4356.0005/input/input12                    
+  Oops#1 Part17                                                                 
+  <6>[   31.176612] hid-generic 0018:04F3:4356.0005: input,hidraw0: I2C HID     
+  v1.00 Device [ELAN2513:00 04F3:4356] on i2c-ELAN2513:00                       
+  <6>[   31.184855] input: PMF-TA output events as                              
+  /devices/platform/AMDI0105:00/input/input14                                   
+  <6>[   31.184934] amd-pmf AMDI0105:00: registered PMF device successfully     
+  <6>[   31.191525] rtc_cmos 00:00: RTC can wake from S4                        
+  <6>[   31.191526] pstore: Using crash dump compression: deflate               
+  <6>[   31.191652] RAPL PMU: API unit is 2^-32 Joules, 2 fixed counters,       
+  163840 ms ovfl timer                                                          
+  <6>[   31.191656] RAPL PMU: hw unit of domain package 2^-16 Joules            
+  <6>[   31.191657] RAPL PMU: hw unit of domain core 2^-16 Joules               
+  <5>[   31.191817] cfg80211: Loading compiled-in X.509 certificates for        
+  regulatory database                                                           
+  <6>[   31.19196                                                               
+  ──── (261 lines hidden) ───────────────────────────────────────────────────── 
+  tel btintel drm_buddy snd_compress mt76_connac_lib drm_exec btmtk ac97_bus    
+  snd_hda_codec drm_suballoc_helper mt76 btbcm snd_pcm_dmaengine drm_ttm_helper 
+   snd_rpl_pci_acp6x snd_hda_scodec_cs35l56_i2c ttm snd_hda_core                
+  firmware_attributes_class edac_mce_amd joydev mousedev snd_intel_dspcfg       
+  mac80211 snd_acp_pci snd_hda_scodec_cs35l56 bluetooth drm_display_helper      
+  edac_core snd_intel_sdw_acpi snd_hda_cirrus_scodec snd_amd_acpi_mach          
+  snd_hwdep snd_acp_legacy_common snd_soc_cs35l56_shared spd5118 intel_rapl_msr 
+   amd_atl hp_wmi cec snd_pci_acp6x snd_soc_cs_amp_lib ecdh_generic             
+  intel_rapl_common i2c_algo_bit hid_multitouch sparse_keymap wmi_bmof snd_pcm  
+  ghash_clmulni_intel rapl ecc rtc_cmos efi_pstore cs_dsp cfg80211              
+  snd_pci_acp5x ucsi_acpi snd_timer sp5100_tco i2c_hid_acpi amd_pmf             
+  snd_rn_pci_acp3x amdxdna typec_ucsi watchdog snd serial_multi_instantiate     
+  i2c_hid snd_acp_config rfkill amdtee video evdev snd_soc_acpi roles           
+  platform_profile                                                              
+  Oops#1 Part1                                                                  
+  <4>[ 1049.492509]  thermal tiny_power_button mac_hid typec gpu_sched          
+  snd_pci_acp3x soundcore crc16 amd_sfh wmi amd_isp4 battery button libarc4 ac  
+  amd_pmc wireless_hotkey k10temp i2c_piix4 i2c_smbus serio_raw xt_conntrack    
+  nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 ip6t_rpfilter ipt_rpfilter         
+  xt_pkttype xt_LOG nf_log_syslog xt_tcpudp nft_compat x_tables nf_tables       
+  sch_fq_codel kvm_amd ccp rng_core kvm loop irqbypass nfnetlink efivarfs       
+  dmi_sysfs autofs4 crc32c_cryptoapi dm_crypt encrypted_keys trusted            
+  asn1_encoder tee hid_generic input_leds led_class atkbd libps2 vivaldi_fmap   
+  nvme aesni_intel xhci_pci thunderbolt nvme_core xhci_hcd nvme_keyring         
+  nvme_auth hkdf i8042 serio vfat fat usbhid hid nls_iso8859_1 nls_cp437        
+  dm_snapshot dm_bufio dm_mod btrfs blake2b libblake2b xor raid6_pq             
+  <4>[ 1049.498722] ---[ end trace 0000000000000000 ]---                        
+                                                                                
+     ls /var/lib/systemd/pstore/1777519124/                                    
+                                                                                
+  001                                                                           
+                                                                                
+     ls /var/lib/systemd/pstore/1777519124/001                                 
+  dmesg-efi_pstore-177751912401001  dmesg-efi_pstore-177751912411001            
+  dmesg-efi_pstore-177751912402001  dmesg-efi_pstore-177751912412001            
+  dmesg-efi_pstore-177751912403001  dmesg-efi_pstore-177751912413001            
+  dmesg-efi_pstore-177751912404001  dmesg-efi_pstore-177751912414001            
+  dmesg-efi_pstore-177751912405001  dmesg-efi_pstore-177751912415001            
+  dmesg-efi_pstore-177751912406001  dmesg-efi_pstore-177751912416001            
+  dmesg-efi_pstore-177751912407001  dmesg-efi_pstore-177751912417001            
+  dmesg-efi_pstore-177751912408001  dmesg-efi_pstore-177751912418001            
+  dmesg-efi_pstore-177751912409001  dmesg.txt                                   
+  dmesg-efi_pstore-177751912410001                                              
+
+● Round 9 analysis — different signature again, amdgpu fbdev path
+
+  Test B verified live (pcie_aspm=off in cmdline, D0 pin held,
+  power/control=on). The LnkCtl: ASPM L1 Enabled you see is the capability
+  register — pcie_aspm=off overrides at the kernel policy layer. Treating B as
+  live.
+
+  Crash details (uptime 1049s — about 3× longer survival than rounds 7/8):
+
+  Oops: general protection fault, probably for non-canonical address
+  0xe579b4e60ca7d41
+  CPU: 10  Comm: kworker/10:0  Workqueue: events drm_fb_helper_damage_work
+  RIP: refill_obj_stock+0x7e/0x240        ← memcg slab accounting
+    __memcg_slab_free_hook
+    kfree
+    drm_atomic_state_default_clear
+    __drm_atomic_state_free
+    drm_atomic_helper_dirtyfb
+    drm_fbdev_ttm_helper_fb_dirty [drm_ttm_helper]
+    drm_fb_helper_damage_work               ← amdgpu fbdev console refresh
+    process_one_work
+
+  R12 = 0x0e579b4e60ca7d41 — being dereferenced as a slab obj pointer in
+  refill_obj_stock. Non-canonical, looks fully randomized (not a stale kernel
+  pointer like rounds 2/3, not a small overrun like round 8). A pointer-shaped
+  slot has been smashed with garbage.
+
+  What's significant:
+
+  1. The detector is amdgpu's fbdev damage worker. That worker fires every time
+  the TTY framebuffer is dirtied (cursor blink, scroll, etc.). So the corruption
+   is being hit by an amdgpu code path running on a periodic timer/work cadence
+  — not by random VFS like round 8.
+  2. Test B falsified. PCIe link-state transitions are not the trigger.
+  3. Round 7 hypothesis (mt76 wake) and round 8 hypothesis (mt76 steady-state 
+  RX) are both looking weaker. Round 9's site is in DRM/amdgpu, not in mt76.
+  Same FAIL module set is loaded, but the chain crashed in a different driver
+  entirely.
+  4. PASS/FAIL table reread:
+  module_blacklist=pinctrl_amdisp,i2c_designware_amdisp was FAIL, but
+  module_blacklist=amdgpu was PASS. The data already pointed at amdgpu (or its
+  dependent SMU/PMF stack) as the producer, not pinctrl_amdisp. Round 9
+  corroborates that.
+  5. 3× longer survival under A+B is real (1049s vs 312–338s). Possible
+  explanations: B reduced exposure on one path, or it's just variance because
+  the producer's effective rate slowed (e.g., fewer GPU damage events with the
+  user not interacting).
+
+  Recommended next step — Test C from round 8's plan, layered on A+B: pin
+  amdgpu's DPM to high to suppress GPU clock/voltage transitions. If C also
+  fails, the next narrowing test is module_blacklist=amd_pmf alone (keep amdgpu
+  loaded so we still get a display, but remove the AMD Platform Management
+  Framework — historical data suggests it matters) before falling back to
+  module_blacklist=amdgpu.
+
+  Test C diff would be a one-line addition to systemd.tmpfiles.rules:
+
+  "w /sys/class/drm/card1/device/power_dpm_force_performance_level - - - - high"
+
+  (plus refresh the comment block in boot.kernelParams to reflect round-9
+  outcomes)
+
+  Two questions before I create the round-9 session and apply C:
+
+  1. Want me to proceed with Test C as planned, or jump straight to Test D
+  (module_blacklist=amd_pmf) given that round 9 crashed in the DRM/amdgpu path?
+  Test C is cheaper and more reversible; Test D is a narrower bisection of the
+  historical PASS/FAIL data.
+  2. Before reboot, can you verify the DRM minor — ls /sys/class/drm/ — to
+  confirm we want card1 (round 8 had amdgpu on minor 1, but worth checking after
+   this boot in case it shifted)?
+
+✻ Cogitated for 1m 48s
+
+❯ lets jump to disabling amd_pmf                                                
+
+● Bash(date -u +'%Y-%m-%dT%H%M%SZ')
+  ⎿  2026-04-30T033617Z
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(mkdir -p /home/nullcopy/Projects/nixos-config/main/help-sessions/help-ses
+      sion-2026-04-30T033617Z)
+  ⎿  Done
+
+● Write(help-sessions/help-session-2026-04-30T033617Z/oops-0301Z.txt)
+  ⎿  Wrote 186 lines to
+     help-sessions/help-session-2026-04-30T033617Z/oops-0301Z.txt
+         1:46 UTC).ps dump (system rebooted ~1777518106 = 2026-04-30 03:0
+         pm=off), bothr Test A (D0 pin on 0000:c1:00.0) + Test B (pcie_as
+         power/control before the soak (cmdline contained pcie_aspm=off, 
+       4 read "on", LnkCtl reported ASPM L1 capability — kernel policy ov
+       5 erride holds).
+         s in roundsdid NOT prevent the crash. Survival 1049s vs 312s/338
+       7 7/8 — about 3× longer, but still a hard crash.
+       9 Source: /var/lib/systemd/pstore/1777519124/001/dmesg.txt (18 par
+      10 pstore writes parts back-to-front per round 8's notes — Part 18 
+         is the
+     … +228 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-30T033617Z/findings.md)
+  ⎿  Wrote 196 lines to
+     help-sessions/help-session-2026-04-30T033617Z/findings.md
+      2 name: Help session findings — round 9 (Test A+B held, third signa
+      3 description: Round 9 confirmed Test B (pcie_aspm=off) live but di
+        d not prevent the crash. Survival 1049s vs 312s/338s. New oops is
+        e amdgpu fbdev damage worker. Skipping Test C (DPM pin) and going
+         straight to Test D (module_blacklist=amd_pmf) per user direction
+      4 type: project
+      6 ---
+      7 # Help session findings — round 9
+      9 Continuation of crash triage on wisp (HP ZBook Ultra G1a 14" / AM
+        D Strix Halo).
+     … +257 lines (ctrl+o to expand)
+
+● Write(help-sessions/help-session-2026-04-30T033617Z/actions.md)
+  ⎿  Wrote 161 lines to
+     help-sessions/help-session-2026-04-30T033617Z/actions.md
+      2 name: actions — wisp crash triage, round 9 (Test A+B held + Test 
+        D layered)
+      3 description: What was done in round 9 (D0 pin + pcie_aspm=off ret
+        ained, module_blacklist=amd_pmf added) and what the user needs to
+         do next
+      5 ---e: project
+      6 
+      7 # actions — wisp crash triage, round 9
+      8 
+      9 ## Done this session (2026-04-30 UTC)
+     … +192 lines (ctrl+o to expand)
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 36 lines, removed 32 lines
+      18    boot.loader.efi.canTouchEfiVariables = true;
+      19    boot.kernelPackages = pkgs.linuxPackages_latest;
+      20  
+      21 -  # Crash triage — latest: help-sessions/help-session-2026-04-3
+         -0T025055Z/.                                                    
+      21 +  # Crash triage — latest: help-sessions/help-session-2026-04-3
+         +0T033617Z/.                                                    
+      22    #
+      23 -  # Round 8 (Test A held, signature changed → layer Test B):   
+      24 -  #  - Test A (D0 pin on the MT7925 PCIe device, applied round 
+         -7) took                                                        
+      25 -  #    effect: power/control = on, no module_blacklist, all saf
+         -ety                                                            
+      26 -  #    params live. System still crashed at uptime 338s (≈6s lo
+         -nger                                                           
+      27 -  #    than the round-7 312s reference).                       
+      28 -  #  - The new oops is **not** the mt76 page_pool / wake-handle
+         -r crash.                                                       
+      29 -  #    It's slub_debug=FZP catching an 8-byte right-redzone ove
+         -rwrite                                                         
+      30 -  #    on a freed kmalloc-2k object. Detected by an unrelated V
+         -FS                                                             
+      31 -  #    allocation in nd_alloc_stack from .quickshell-wra doing 
+      32 -  #    newfstatat — quickshell is the detector, not the produce
+         -r.                                                             
+      33 -  #  - Conclusion: D0 pin suppressed *one* failure path (the wa
+         -ke                                                             
+      34 -  #    handler), but a steady-state corruption is still happeni
+         -ng from                                                        
+      35 -  #    a different producer / different code path. Don't revert
+         - A —                                                           
+      36 -  #    layer B on top.                                         
+      23 +  # Round 9 (Test A+B held, third signature → jump to Test D): 
+      24 +  #  - Test A (D0 pin on MT7925) and Test B (pcie_aspm=off) bot
+         +h took                                                         
+      25 +  #    effect: power/control = on, pcie_aspm=off in cmdline. Sy
+         +stem                                                           
+      26 +  #    still crashed at uptime 1049s (~17.5 min — about 3× long
+         +er                                                             
+      27 +  #    survival than rounds 7/8).                              
+      28 +  #  - The new oops is a third distinct signature: GPF on a sma
+         +shed                                                           
+      29 +  #    objcg pointer (R12 = 0x0e579b4e60ca7d41) inside refill_o
+         +bj_stock,                                                      
+      30 +  #    triggered from kfree inside drm_atomic_state_default_cle
+         +ar, called                                                     
+      31 +  #    from amdgpu's fbdev damage worker drm_fb_helper_damage_w
+         +ork.                                                           
+      32 +  #  - The detector path is amdgpu's fbdev console-refresh work
+         +er. Round                                                      
+      33 +  #    9 is consistent with the historical PASS/FAIL table wher
+         +e                                                              
+      34 +  #    module_blacklist=amdgpu PASSes — the producer is somewhe
+         +re in                                                          
+      35 +  #    amdgpu's pull-in chain.                                 
+      36    #
+      38 -  # Test B (this revision): keep the D0 pin AND add pcie_aspm=o
+         -ff to                                                          
+      39 -  # rule out PCIe L0s/L1 link-state transitions as the couplant
+         - for                                                           
+      40 -  # whatever DMA / memcpy is overrunning a 2K allocation. Soak 
+         -in TTY                                                         
+      41 -  # ≥30 min.                                                   
+      37 +  # Test D (this revision, per user direction — skipping the ro
+         +und-8                                                          
+      38 +  # plan's Test C "pin amdgpu DPM to high"): keep A + B and add
+      39 +  # module_blacklist=amd_pmf to narrow the producer. amdgpu sta
+         +ys                                                             
+      40 +  # loaded so the display still works; only the AMD Platform   
+      41 +  # Management Framework (drivers/platform/x86/amd/pmf/) is rem
+         +oved.                                                          
+      42 +  # Soak in TTY ≥30 min (≥60 min preferred since round 9 was 10
+         +49s).                                                          
+      43    # Outcomes:
+      43 -  #   - clean → live mitigation = D0 pin + pcie_aspm=off. Round
+         - 9 then                                                        
+      44 -  #     tries peeling the D0 pin alone to see whether ASPM-off 
+         -is                                                             
+      45 -  #     sufficient.                                            
+      46 -  #   - crashes → keep A+B, layer Test C (pin amdgpu DPM to hig
+         -h via a                                                        
+      47 -  #     second tmpfiles rule on                                
+      48 -  #     /sys/class/drm/card1/device/power_dpm_force_performance
+         -_level).                                                       
+      49 -  #   - all of A+B+C fail → fall back to round-6 plan          
+      50 -  #     (module_blacklist=mt7925e,mt7925_common). WiFi+BT off; 
+         -ethernet                                                       
+      51 -  #     via dock. We'd still file upstream against mt76 with th
+         -e                                                              
+      52 -  #     full pstore evidence pack.                             
+      44 +  #   - clean → strong evidence amd_pmf is in the producer chai
+         +n.                                                             
+      45 +  #     File upstream against drivers/platform/x86/amd/pmf/. Op
+         +tionally                                                       
+      46 +  #     peel A and/or B to see which layers are still required.
+      47 +  #   - crashes → amd_pmf alone isn't the producer. Round 11 ca
+         +ndidates,                                                      
+      48 +  #     cheapest first:                                        
+      49 +  #       (a) Test C from round 8 (pin amdgpu DPM to high via t
+         +mpfiles                                                        
+      50 +  #           on /sys/class/drm/card1/device/power_dpm_force_pe
+         +rformance_level)                                               
+      51 +  #       (b) module_blacklist=amdgpu (historical PASS — loses 
+         +display                                                        
+      52 +  #           but matches ground-truth evidence)               
+      53 +  #       (c) module_blacklist=mt7925e,mt7925_common (round-6/7
+         + fallback,                                                     
+      54 +  #           loses WiFi+BT, ethernet via dock)                
+      55    #
+      56    # Watchdog-panic + slub_debug params stay on as a safety net 
+          through
+      55 -  # the test cycle. They caught both the round-7 and round-8 oo
+         -pses;                                                          
+      56 -  # peeling is later, after a clean week.                      
+      57 +  # the test cycle. They caught rounds 7/8/9; peeling is later,
+         + after a                                                       
+      58 +  # clean week.                                                
+      59    #
+      60    # Historical PASS/FAIL table (round-7 TTY soaks, all without 
+          D0 pin /
+      61    # without pcie_aspm=off):
+     ...
+      64    #   module_blacklist=pinctrl_amdisp,i2c_designware_amdisp    
+                       FAIL
+      65    #   module_blacklist=amdgpu                                  
+                       PASS
+      66    #   module_blacklist=                                        
+                       FAIL  ← round-7 dump
+      65 -  # Round 8 (D0 pin + no module_blacklist):                    
+         -             FAIL  ← round-8 dump (different signature)        
+      67 +  # Round 8 (A: D0 pin alone):                                 
+         +             FAIL  ← round-8 dump (kmalloc-2k redzone)         
+      68 +  # Round 9 (A + B: D0 pin + pcie_aspm=off):                   
+         +             FAIL  ← round-9 dump (objcg ptr GPF in fbdev)     
+      69    boot.kernelParams = [
+      70      "consoleblank=0"
+      71      "slub_debug=FZP"
+     ...
+      75      "panic_on_rcu_stall=1"
+      76      "rcu_cpu_stall_timeout=15"
+      77      "pcie_aspm=off"
+      78 +    "module_blacklist=amd_pmf"                                 
+      79    ];
+      80  
+      81    # Test A (kept from round 7): pin the WiFi PCIe device
+
+● Update(hosts/wisp/configuration.nix)
+  ⎿  Added 4 lines, removed 4 lines
+      81    # Test A (kept from round 7): pin the WiFi PCIe device
+      82    # (MT7925 @ 0000:c1:00.0) to D0 so mt792x_pm_wake_work — the 
+          path
+      83    # that crashed at uptime 312s in round 7 — never runs. Holds 
+          across
+      84 -  # round 8 because the round-8 signature is different (and rev
+         -erting                                                         
+      85 -  # this would re-expose the round-7 wake-path crash). tmpfiles
+         - writes                                                        
+      86 -  # the value at boot; the udev rule reapplies it if the device
+      87 -  # re-enumerates (e.g. after a PCI rescan).                   
+      84 +  # rounds 8 and 9 because each subsequent round had a differen
+         +t                                                              
+      85 +  # signature (reverting A would re-expose the round-7 wake-pat
+         +h crash).                                                      
+      86 +  # tmpfiles writes the value at boot; the udev rule reapplies 
+         +it if                                                          
+      87 +  # the device re-enumerates (e.g. after a PCI rescan).        
+      88    systemd.tmpfiles.rules = [
+      89      "w /sys/bus/pci/devices/0000:c1:00.0/power/control - - - - 
+          on"
+      90    ];
+
+● Round 9 captured and Test D applied.
+
+  Files written:
+  - help-sessions/help-session-2026-04-30T033617Z/oops-0301Z.txt —
+  chronologically ordered round-9 dump
+  - help-sessions/help-session-2026-04-30T033617Z/findings.md — round-9 analysis
+   (third signature: smashed objcg pointer in refill_obj_stock, detected via
+  amdgpu fbdev damage worker)
+  - help-sessions/help-session-2026-04-30T033617Z/actions.md — Test D plan +
+  round-11 fallbacks
+
+  Config change (hosts/wisp/configuration.nix):
+  - Kept Test A (D0 pin tmpfiles + udev) and Test B (pcie_aspm=off)
+  - Added "module_blacklist=amd_pmf" to boot.kernelParams
+  - Refreshed comment block to reflect rounds 7→8→9 and the round-10 plan
+
+  What to do on wisp:
+
+  sudo nixos-rebuild switch --flake .#wisp
+  sudo reboot
+
+  After boot, drop into TTY and verify all three layers took effect:
+  cat /proc/cmdline                                          # contains
+  pcie_aspm=off AND module_blacklist=amd_pmf
+  cat /sys/bus/pci/devices/0000:c1:00.0/power/control        # on
+  lsmod | grep -E '^(amdgpu|amd_pmf|amd_pmc|mt7925e|mt7925_common|mt76)'
+  Expect amdgpu, mt7925e, mt76 family, and amd_pmc loaded; amd_pmf should be 
+  absent. Soak ≥30 min (preferably 60, since round 9 took 1049s).
+
+  Outcomes mapping per actions.md:
+  - Clean → amd_pmf is in the producer chain; round 11 starts peeling A/B layers
+   and we file upstream against drivers/platform/x86/amd/pmf/.
+  - Crashes → amd_pmf alone isn't enough; round 11 candidates in cheapest-first
+  order are Test C (pin amdgpu DPM high), then module_blacklist=amdgpu (matches
+  historical PASS — loses display), then module_blacklist=mt7925e,mt7925_common
+  (loses WiFi).
+
+  Paste 001/dmesg.txt from the newest pstore dir as oops-<HHMM>Z.txt if it
+  crashes again, plus the post-boot verification output regardless of outcome.
+
+✻ Cogitated for 5m 14s

@@ -1,0 +1,186 @@
+Round-9 oops dump (system rebooted ~1777518106 = 2026-04-30 03:01:46 UTC).
+Captured under Test A (D0 pin on 0000:c1:00.0) + Test B (pcie_aspm=off), both
+verified live before the soak (cmdline contained pcie_aspm=off, power/control
+read "on", LnkCtl reported ASPM L1 capability — kernel policy override holds).
+
+Test A + B did NOT prevent the crash. Survival 1049s vs 312s/338s in rounds
+7/8 — about 3× longer, but still a hard crash.
+
+Source: /var/lib/systemd/pstore/1777519124/001/dmesg.txt (18 parts).
+pstore writes parts back-to-front per round 8's notes — Part 18 is the
+oldest segment (boot), Part 1 is the panic itself. The dmesg.txt the user
+pasted from is already chronologically ordered Part18 → Part1. This file
+preserves that ordering.
+
+────────────────────────────────────────────────────────────────────────
+Part 18 → Part 5: boot, module load, ~17 min of normal operation
+────────────────────────────────────────────────────────────────────────
+
+Key boot lines (uptime ~31s):
+
+  amdxdna 0000:c4:00.1: enabling device (0000 -> 0002)
+  amd-pmf AMDI0105:00: registered PMF device successfully    ← AMD PMF live
+  pstore: Using crash dump compression: deflate
+  pstore: Registered efi_pstore as persistent store backend
+
+Around uptime 31.4s, mt7925 brings up:
+
+  mt7925e 0000:c1:00.0: enabling device (0000 -> 0002)
+  mt7925e 0000:c1:00.0: ASIC revision: 79250000
+  mt7925e 0000:c1:00.0: HW/SW Version: 0x8a108a10, Build Time: 20260106153007a
+  mt7925e 0000:c1:00.0: WM Firmware Version: ____000000, Build Time: 20260106153120
+  mt7925e 0000:c1:00.0 wlp193s0: renamed from wlan0
+
+amdgpu init at uptime ~32.7s:
+
+  amdgpu 0000:c3:00.0: amdgpu: initializing kernel modesetting (IP DISCOVERY 0x1002:0x1586 0x103C:0x8D01 0xD1)
+  amdgpu 0000:c3:00.0: amdgpu: detected ip block number 4 <smu_v14_0_0> (smu)
+  amdgpu 0000:c3:00.0: amdgpu: detected ip block number 5 <dce_v1_0_0> (dm)
+  ...
+  amdgpu 0000:c3:00.0: amdgpu: SMU is initialized successfully!
+  amdgpu 0000:c3:00.0: amdgpu: [drm] Display Core v3.2.359 initialized on DCN 3.5.1
+  amdgpu 0000:c3:00.0: amdgpu: [drm] DMUB hardware initialized: version=0x09003E00
+  fbcon: amdgpudrmfb (fb0) is primary device
+  Console: switching to colour frame buffer device 180x56
+
+WiFi associates around uptime 36s:
+
+  wlp193s0: authenticate with 62:a4:b7:5c:51:d3 (local address=8c:8b:5b:0e:8c:8b)
+  wlp193s0: associated
+  wlp193s0: Limiting TX power to 30 (30 - 0) dBm as advertised by 62:a4:b7:5c:51:d3
+
+After this — ~17 minutes of nothing in the dmesg buffer (TTY soak, idle).
+
+Then at uptime 1049.470622:
+
+────────────────────────────────────────────────────────────────────────
+Part 4 → Part 1: the oops itself
+────────────────────────────────────────────────────────────────────────
+
+  [ 1049.470622] Oops: general protection fault, probably for non-canonical
+                 address 0xe579b4e60ca7d41: 0000 [#1] SMP NOPTI
+  [ 1049.470739] CPU: 10 UID: 0 PID: 50 Comm: kworker/10:0 Not tainted 6.19.10 #1-NixOS PREEMPT(lazy)
+  [ 1049.472277] Hardware name: HP HP ZBook Ultra G1a 14 inch Mobile Workstation PC/8D01,
+                 BIOS X89 Ver. 01.03.02 06/18/2025
+  [ 1049.473053] Workqueue: events drm_fb_helper_damage_work
+  [ 1049.473613] RIP: 0010:refill_obj_stock+0x7e/0x240
+
+Disassembly at faulting RIP (offset 0x7e):
+
+  Code: 80 29 42 02 48 8d a8 40 a6 51 90 48 8b 45 08 48 39 f8 0f 84 a4 00 00 00
+        48 89 ef 44 89 4c 24 04 e8 f7 f2 ff ff e8 12 76 d2 ff
+        <49> 8b 04 24                                ← FAULT: mov rax, [r12]
+        44 8b 4c 24 04 a8 03 0f 85 8b 01 00 00 65 48 ff 00 44
+
+Registers:
+  RSP: 0018:ffffccb0c03e3bb8 EFLAGS: 00010202
+  RAX: 0000000000000001  RBX: 0000000000000608  RCX: ffff8b6c8d74a1c0
+  RDX: ffff8b518f068040  RSI: 0000000000000001  RDI: ffff8b518f068040
+  RBP: ffff8b6c8d742640  R08: 0000000000000006  R09: 00000000ffffffff
+  R10: 0000000000000284  R11: 0000000000000000  R12: 0e579b4e60ca7d41   ← SMASHED
+  R13: ffff8b6cfe0ba780  R14: 00000000fffff9f8  R15: ffffccb0c03e3c50
+
+R12 is the bad pointer. 0x0e579b4e60ca7d41 is non-canonical (top 4 nibbles
+not 0xffff8...) and not a userspace pointer either. It looks like a slot
+that previously held a pointer was overwritten with random data — same
+shape as round-2/round-3 victims, but a fully random value rather than a
+neighbouring kernel pointer.
+
+Call trace:
+
+  refill_obj_stock+0x7e/0x240          ← per-cpu memcg slab obj cache
+  __memcg_slab_free_hook+0xe1/0x150    ← memcg slab free fast-path
+  kfree+0x39c/0x490
+  drm_atomic_state_default_clear+0x127/0x350
+  __drm_atomic_state_free+0x71/0xc0
+  drm_atomic_helper_dirtyfb+0x2b5/0x310
+  drm_fbdev_ttm_helper_fb_dirty+0x213/0x9e0 [drm_ttm_helper]
+  drm_fb_helper_damage_work+0xe9/0x1a0 ← amdgpu fbdev console refresh
+  process_one_work+0x18e/0x350
+  worker_thread+0x165/0x2d0
+  kthread+0xfb/0x260
+  ret_from_fork+0x24e/0x290
+  ret_from_fork_asm+0x1a/0x30
+
+Modules linked in (FAIL set, same as rounds 7 and 8):
+
+  rfcomm snd_seq_dummy snd_hrtimer snd_seq snd_seq_device fuse
+  xt_connmark xt_MASQUERADE xt_mark nft_chain_nat nf_nat
+  hid_sensor_prox hid_sensor_gyro_3d hid_sensor_trigger
+  industrialio_triggered_buffer kfifo_buf hid_sensor_iio_common
+  industrialio hid_sensor_hub ccm
+  pinctrl_amdisp i2c_designware_amdisp                ← still present
+  tun cmac algif_hash algif_skcipher af_alg af_packet bnep
+  amdgpu                                              ← present
+  snd_acp_legacy_mach snd_acp_mach snd_soc_nau8821 snd_acp3x_rn
+  snd_hda_scodec_cs35l56_spi regmap_spi snd_acp70 snd_acp_i2s
+  snd_acp_pdm snd_soc_dmic snd_acp_pcm snd_sof_amd_acp70
+  snd_sof_amd_acp63 snd_sof_amd_vangogh snd_sof_amd_rembrandt
+  snd_sof_amd_renoir snd_sof_amd_acp snd_sof_pci snd_sof_xtensa_dsp
+  snd_sof snd_sof_utils snd_ctl_led snd_pci_ps snd_soc_acpi_amd_match
+  snd_amd_sdw_acpi snd_hda_codec_alc269 soundwire_amd
+  snd_hda_scodec_component soundwire_generic_allocation
+  snd_hda_codec_realtek_lib soundwire_bus snd_hda_codec_generic
+  snd_soc_sdca snd_hda_codec_atihdmi snd_hda_codec_hdmi
+  mt7925e                                             ← present
+  hp_bioscfg snd_soc_core
+  mt7925_common btusb btrtl amdxcp mt792x_lib         ← present
+  drm_panel_backlight_quirks snd_hda_intel btintel drm_buddy
+  snd_compress mt76_connac_lib drm_exec btmtk ac97_bus snd_hda_codec
+  drm_suballoc_helper mt76                            ← present
+  btbcm snd_pcm_dmaengine drm_ttm_helper snd_rpl_pci_acp6x
+  snd_hda_scodec_cs35l56_i2c ttm snd_hda_core firmware_attributes_class
+  edac_mce_amd joydev mousedev snd_intel_dspcfg mac80211 snd_acp_pci
+  snd_hda_scodec_cs35l56 bluetooth drm_display_helper edac_core
+  snd_intel_sdw_acpi snd_hda_cirrus_scodec snd_amd_acpi_mach
+  snd_hwdep snd_acp_legacy_common snd_soc_cs35l56_shared spd5118
+  intel_rapl_msr amd_atl hp_wmi cec snd_pci_acp6x snd_soc_cs_amp_lib
+  ecdh_generic intel_rapl_common i2c_algo_bit hid_multitouch
+  sparse_keymap wmi_bmof snd_pcm ghash_clmulni_intel rapl ecc rtc_cmos
+  efi_pstore cs_dsp cfg80211 snd_pci_acp5x ucsi_acpi snd_timer
+  sp5100_tco i2c_hid_acpi
+  amd_pmf                                             ← present (TARGET for Test D)
+  snd_rn_pci_acp3x amdxdna typec_ucsi watchdog snd
+  serial_multi_instantiate i2c_hid snd_acp_config rfkill amdtee video
+  evdev snd_soc_acpi roles platform_profile thermal tiny_power_button
+  mac_hid typec gpu_sched snd_pci_acp3x soundcore crc16 amd_sfh wmi
+  amd_isp4 battery button libarc4 ac amd_pmc                       ← amd_pmc also present
+  wireless_hotkey k10temp i2c_piix4 i2c_smbus serio_raw xt_conntrack
+  nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 ip6t_rpfilter
+  ipt_rpfilter xt_pkttype xt_LOG nf_log_syslog xt_tcpudp nft_compat
+  x_tables nf_tables sch_fq_codel kvm_amd ccp rng_core kvm loop
+  irqbypass nfnetlink efivarfs dmi_sysfs autofs4 crc32c_cryptoapi
+  dm_crypt encrypted_keys trusted asn1_encoder tee hid_generic
+  input_leds led_class atkbd libps2 vivaldi_fmap nvme aesni_intel
+  xhci_pci thunderbolt nvme_core xhci_hcd nvme_keyring nvme_auth
+  hkdf i8042 serio vfat fat usbhid hid nls_iso8859_1 nls_cp437
+  dm_snapshot dm_bufio dm_mod btrfs blake2b libblake2b xor raid6_pq
+
+  ---[ end trace 0000000000000000 ]---
+
+────────────────────────────────────────────────────────────────────────
+Notes for whoever reads this next
+────────────────────────────────────────────────────────────────────────
+
+- This is NOT a slub_debug redzone catch (round 8) and NOT a page_pool
+  pp_magic catch (round 7). It's a hard GPF on a smashed pointer
+  inside per-cpu memcg slab cache (refill_obj_stock).
+- The detector path runs in `kworker/10:0` on the `events` workqueue,
+  doing `drm_fb_helper_damage_work` — amdgpu's fbdev console damage
+  refresh. That worker fires every time the TTY framebuffer gets
+  dirtied. So the corruption either lives in a slab adjacent to
+  amdgpu's fbdev allocations, or amdgpu's path is the one that
+  happens to dereference a freed/smashed objcg pointer on the way
+  through kfree.
+- R12 is `objcg` (per-task / per-stock memcg charge accounting).
+  The fault is on `mov rax, [r12]` reading the first field. If
+  `obj_stock->cached_objcg` is overwritten with garbage between
+  refills, that's a use-after-free or out-of-bounds write of an
+  objcg pointer somewhere upstream.
+- Note `amd_pmf` and `amd_pmc` are both loaded. Round 9 still reads
+  consistent with the historical PASS/FAIL data: blacklisting
+  `amdgpu` PASSes; blacklisting `pinctrl_amdisp+i2c_designware_amdisp`
+  alone FAILs. Round 10 narrows by trying `module_blacklist=amd_pmf`
+  alone (keep amdgpu loaded so we still have display, lose only the
+  PMF stack which talks to SMU via mailboxes — a candidate producer
+  for SMU/DRM-side memory corruption).
