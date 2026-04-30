@@ -13,6 +13,7 @@
     ./aliases.nix
     ./neovim.nix
     ./niri.nix
+    ./opencode.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
