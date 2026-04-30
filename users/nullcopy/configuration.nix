@@ -12,6 +12,7 @@
     ./tailscale.nix
     ./aliases.nix
     ./neovim.nix
+    ./niri.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
