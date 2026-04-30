@@ -1,16 +1,28 @@
 # Yubikey LUKS configuration
 # EFI: /dev/nvme0n1p1
 # LUKS: /dev/nvme0n1p2
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   myNixpkgs = builtins.fetchTarball {
     url = "https://github.com/nullcopy/nixpkgs/archive/fix/luksroot-salt-rotation.tar.gz";
-    sha256 = "0rdcd5mbcmbm88cbfrzxcivqr0ayjdzc7nydyfy6w3hwpq58iidi";
+    sha256 = "0503wqci562148s1p561fsy2gf7zwxynh5lzh6w0xd2iqdfx2jw9";
   };
-in {
+in
+{
   disabledModules = [ "system/boot/luksroot.nix" ];
   imports = [ "${myNixpkgs}/nixos/modules/system/boot/luksroot.nix" ];
-  boot.initrd.kernelModules = [ "vfat" "nls_cp437" "nls_iso8859-1" "usbhid" ];
+  boot.initrd.systemd.enable = false; # stage 1 systemd doesn't support Yubikey LUKS
+  boot.initrd.kernelModules = [
+    "vfat"
+    "nls_cp437"
+    "nls_iso8859-1"
+    "usbhid"
+  ];
   boot.initrd.luks.yubikeySupport = true;
   boot.initrd.luks.devices."nixos-enc" = {
     device = "/dev/nvme0n1p2";
