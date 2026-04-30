@@ -1,0 +1,154 @@
+# Round 10 panic dump — chronologically ordered (Part 39 → Part 1)
+#
+# Sources:
+#   /var/lib/systemd/pstore/1777524011/001/dmesg.txt  (parts 39 → 11)
+#   /var/lib/systemd/pstore/1777524010/001/dmesg.txt  (parts 10 → 1)
+#
+# pstore wrote parts back-to-front, so highest part number = oldest line.
+# The SLUB object/redzone/padding hex dump is multi-KB; pstore split the
+# capture across TWO adjacent dump dirs created the same wall-clock second
+# (1777524010 and 1777524011). Total 39 parts. Body lines from 0x1000 up
+# to 0x12af are NOT in the dump — they were in a hypothetical Part 40+
+# that didn't fit pstore's record.
+#
+# Survival: 1257s (~21 min), slightly longer than round 9 (1049s).
+# Comm: "Thread (pooled)" PID 4198 UID 1000 — userspace thread-pool worker.
+# Syscall: __x64_sys_access (#21).
+# RIP: object_err+0x1d7/0x1e5 — SLUB poison-violation panic (panic_on_warn).
+#
+# Slab geometry (from RBP/R12 + the poison/redzone layout):
+#   R12 = ffff8b0d3eaf0000   ← slab page base
+#   RBP = ffff8b0d3eaf1000   ← object base for the corrupted slot
+#   end-of-body 0xa5 marker at ffff8b0d3eaf1fff
+#   redzone bb*8 at         ffff8b0d3eaf2000
+#   padding 5a... starts at ffff8b0d3eaf2010
+#   → object size = 0x1000 = 4096 bytes  → kmalloc-4k slab
+#
+# Corruption (visible at Part 25):
+#   ffff8b0d3eaf1fc0: 44 ca 76 d5 8e c2 28 07 e7 e3 a1 a2 40 bb a8 2c
+#   16 bytes of pointer-shaped garbage written into the freed-object body
+#   at offset 0xfc0 (64 bytes from end of object).
+#   Surrounding poison (0x6b), end-of-body marker (0xa5), redzone (0xbb),
+#   and padding (0x5a) are all INTACT.
+#
+# Detector chain (Part 4-1):
+#   __x64_sys_access → do_faccessat → user_path_at → filename_lookup
+#     → path_lookupat → link_path_walk → step_into_slowpath → pick_link
+#     → kernfs_iop_get_link (allocating a buffer for the symlink target)
+#     → __kmalloc_cache_noprof → __slab_alloc → ___slab_alloc
+#     → get_partial_node → alloc_debug_processing → check_object
+#     → check_bytes_and_report → object_err → __report_bug → __warn
+#     → check_panic_on_warn → panic
+#
+# So the detector is a userspace `access(2)` walking a sysfs/cgroupfs/etc
+# symlink — entirely innocent. SLUB drew a recycled 4K object from the
+# partial list, ran check_object() on it, and discovered 16 bytes of
+# poison had been overwritten while it sat freed. Whoever wrote those
+# 16 bytes after the kfree IS the producer; this trace tells us NOTHING
+# about who that was. (The page allocator's "first freed by / first
+# allocated by" backtraces would normally be in the SLUB report, but
+# they would have been printed AFTER the panic header in this trace —
+# they may be in the parts that didn't fit, or pstore may have
+# truncated.)
+#
+# Modules linked in (Part 7-6, edited for relevance):
+#   amdgpu, amdxdna, amdxcp, amdtee, amd_pmc, amd_atl, amd_sfh, amd_isp4
+#   mt7925e, mt7925_common, mt792x_lib, mt76_connac_lib, mt76
+#   pinctrl_amdisp, i2c_designware_amdisp
+#   bluetooth + btmtk, btintel, btusb, btrtl, btbcm
+#   (amd_pmf is absent — confirms Test D took effect)
+#
+# ============================================================
+# Part 39 (oldest line of dump — first line printed by SLUB)
+# ============================================================
+[ 1257.947879] Object   ffff8b0d3eaf12b0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+... (every 16-byte line from 0x12b0 through 0x1fb0 is 0x6b SLUB free-poison) ...
+[ 1257.963379] Object   ffff8b0d3eaf1fb0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+
+# ============================================================
+# Corrupted slot (Part 25)
+# ============================================================
+[ 1257.963460] Object   ffff8b0d3eaf1fc0: 44 ca 76 d5 8e c2 28 07 e7 e3 a1 a2 40 bb a8 2c  D.v...(.....@..,    ← 16 BYTES UAF WRITE
+[ 1257.963546] Object   ffff8b0d3eaf1fd0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+[ 1257.963634] Object   ffff8b0d3eaf1fe0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b  kkkkkkkkkkkkkkkk
+[ 1257.963721] Object   ffff8b0d3eaf1ff0: 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b 6b a5  kkkkkkkkkkkkkkk.    ← end-of-body 0xa5 INTACT
+[ 1257.963815] Redzone  ffff8b0d3eaf2000: bb bb bb bb bb bb bb bb                          ........            ← redzone (8 bytes 0xbb) INTACT
+[ 1257.963917] Padding  ffff8b0d3eaf2010: 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a 5a  ZZZZZZZZZZZZZZZZ
+... (padding 0x5a from 0x2010 through 0x2fff) ...
+
+# ============================================================
+# Part 8 — first line that's not poison/padding (the panic preamble)
+# ============================================================
+[ 1257.984063] Disabling lock debugging due to kernel taint
+[ 1257.984068] ------------[ cut here ]------------
+[ 1257.984069] WARNING: mm/slub.c:1227 at object_err+0x1d7/0x1e5, CPU#10: Thread (pooled)/4198
+
+# ============================================================
+# Part 5 — RIP / regs
+# ============================================================
+[ 1257.984198] CPU: 10 UID: 1000 PID: 4198 Comm: Thread (pooled) Tainted: G    B               6.19.10 #1-NixOS PREEMPT(lazy)
+[ 1257.984201] Tainted: [B]=BAD_PAGE
+[ 1257.984202] Hardware name: HP HP ZBook Ultra G1a 14 inch Mobile Workstation PC/8D01, BIOS X89 Ver. 01.03.02 06/18/2025
+[ 1257.984204] RIP: 0010:object_err+0x1d7/0x1e5
+[ 1257.984207] Code: 29 c1 48 8d 54 05 00 48 c7 c6 05 ae ce 87 48 c7 c7 4a 26 cd 87 e8 f9 fa ff ff be 01 00 00 00 bf 05 00 00 00 e8 6a 00 10 00 90 <0f> 0b 90 5b 5d 41 5c 41 5d c3 cc cc cc cc 49 89 d4 45 0f b6 0a 53
+[ 1257.984209] RSP: 0018:ffffd2c808c7f918 EFLAGS: 00010092
+[ 1257.984210] RAX: 0000000000000000 RBX: ffff8b0d0004e200 RCX: 0000000000000027
+[ 1257.984211] RDX: 0000000000000005 RSI: 0000000000000001 RDI: ffff8b280d71ea00
+[ 1257.984212] RBP: ffff8b0d3eaf1000 R08: 0000000000000000 R09: 00000000ffffdfff
+[ 1257.984213] R10: ffffffff884613a0 R11: ffffd2c808c7f7b8 R12: ffff8b0d3eaf0000
+[ 1257.984213] R13: fffff7a244fabc00 R14: ffff8b0d0004e200 R15: fffff7a244fabc00
+
+# ============================================================
+# Part 4 — Call Trace (kernel side)
+# ============================================================
+[ 1257.984218] Call Trace:
+[ 1257.984221]  <TASK>
+[ 1257.984227]  check_bytes_and_report.cold+0x4d/0x6b
+[ 1257.984230]  check_object+0x2b8/0x3b0
+[ 1257.984235]  alloc_debug_processing+0xa6/0x100
+[ 1257.984236]  get_partial_node+0x198/0x300
+[ 1257.984238]  ? nd_alloc_stack+0x76/0x180
+[ 1257.984241]  ___slab_alloc+0x5bf/0xdc0
+[ 1257.984243]  ? xas_load+0xd/0xd0
+[ 1257.984247]  ? filemap_get_entry+0xf4/0x1a0
+[ 1257.984249]  ? kernfs_iop_get_link+0x7b/0x330
+[ 1257.984254]  ? __filemap_get_folio_mpol+0x3f/0x370
+[ 1257.984255]  __slab_alloc.isra.0+0x2b/0x60
+[ 1257.984256]  __kmalloc_cache_noprof+0x2e7/0x5e0
+[ 1257.984258]  ? check_object+0x161/0x3b0
+[ 1257.984260]  ? kernfs_iop_get_link+0x7b/0x330
+[ 1257.984262]  ? current_time+0x3e/0x120
+[ 1257.984264]  kernfs_iop_get_link+0x7b/0x330
+[ 1257.984267]  pick_link+0x354/0x450
+[ 1257.984269]  step_into_slowpath+0x17e/0x3d0
+[ 1257.984270]  ? kernfs_dop_revalidate+0xe0/0x150
+[ 1257.984272]  link_path_walk+0x3de/0x630
+[ 1257.984274]  path_lookupat+0x40/0x2a0
+[ 1257.984275]  ? check_object+0x161/0x3b0
+[ 1257.984277]  filename_lookup+0xf7/0x200
+[ 1257.984280]  user_path_at+0x55/0xa0
+[ 1257.984283]  ? do_futex+0x11f/0x190
+[ 1257.984286]  do_faccessat+0xf6/0x2d0
+[ 1257.984291]  __x64_sys_access+0x1c/0x30
+[ 1257.984293]  do_syscall_64+0xb6/0x560
+[ 1257.984296]  ? __irq_exit_rcu+0x4c/0xf0
+[ 1257.984300]  entry_SYSCALL_64_after_hwframe+0x77/0x7f
+[ 1257.984302] RIP: 0033:0x7f0d56912d4b
+
+# ============================================================
+# Part 3 — userspace regs at access(2)
+# ============================================================
+[ 1257.984335] RSP: 002b:00007f0d301fcd38 EFLAGS: 00000246 ORIG_RAX: 0000000000000015    ← 0x15 = SYS_access
+[ 1257.984336] RAX: ffffffffffffffda RBX: 00007f0d2f42e040 RCX: 00007f0d56912d4b
+[ 1257.984337] RDX: 0000000000000000 RSI: 0000000000000000 RDI: 00007f0d2f41e0b0
+[ 1257.984337] RBP: 00007f0d301fceb0 R08: 0000000000000000 R09: 0000000000000000
+[ 1257.984338] R10: 0000000000000000 R11: 0000000000000246 R12: 0000000000400000
+[ 1257.984338] R13: 0000000000000000 R14: 0000000000400000 R15: 00007f0d301fcd50
+[ 1257.984342]  </TASK>
+[ 1257.984344] Kernel panic - not syncing: kernel: panic_on_warn set ...
+
+# ============================================================
+# Part 1 — final lines (newest)
+# ============================================================
+[ 1259.415820] Shutting down cpus with NMI
+[ 1259.415876] Kernel Offset: 0x5400000 from 0xffffffff81000000 (relocation range: 0xffffffff80000000-0xffffffffbfffffff)
