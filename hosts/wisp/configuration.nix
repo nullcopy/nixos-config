@@ -38,7 +38,11 @@
     "softlockup_panic=1"
     "panic_on_rcu_stall=1"
     "rcu_cpu_stall_timeout=15"
-    "module_blacklist=mt7925e,mt7925_common"
+    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amd_pmf,amdgpu" # <---PASS
+    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp,amdgpu" # <---PASS
+    #"module_blacklist=pinctrl_amdisp,i2c_designware_amdisp" # <--FAIL
+    #"module_blacklist=amdgpu" # <---PASS
+    #"module_blacklist=" <---FAIL
   ];
 
   ## ----- hardware ------------------------------------------------------------
