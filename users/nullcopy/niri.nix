@@ -88,10 +88,8 @@ in
         Mod+V                  hotkey-overlay-title="Toggle floating"     { toggle-window-floating; }
         Mod+R                  hotkey-overlay-title="Cycle column width"  { switch-preset-column-width; }
         Mod+C                  hotkey-overlay-title="Center column"       { center-column; }
-        Mod+BracketLeft        hotkey-overlay-title="Consume/expel left"  { consume-or-expel-window-left; }
-        Mod+BracketRight       hotkey-overlay-title="Consume/expel right" { consume-or-expel-window-right; }
-        Mod+Shift+BracketLeft  hotkey-overlay-title="Expel from column"   { expel-window-from-column; }
-        Mod+Shift+BracketRight hotkey-overlay-title="Consume into column" { consume-window-into-column; }
+        Mod+Shift+BracketLeft  hotkey-overlay-title="Consume/expel left"  { consume-or-expel-window-left; }
+        Mod+Shift+BracketRight hotkey-overlay-title="Consume/expel right" { consume-or-expel-window-right; }
 
         // ----- Focus (arrows + vim) -----------------------------------------
         Mod+Left        hotkey-overlay-title=null { focus-column-left; }
