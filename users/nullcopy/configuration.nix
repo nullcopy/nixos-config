@@ -22,6 +22,7 @@
     nerd-fonts.jetbrains-mono
     fzf
     grayjay
+    nautilus
   ];
 
   ## ----- session variables ---------------------------------------------------
