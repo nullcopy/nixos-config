@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 
 {
   ## ----- iGPU memory (GTT) ---------------------------------------------------
@@ -22,4 +22,13 @@
       OLLAMA_FLASH_ATTENTION = "1";
     };
   };
+
+  # Start ollama only when the AMD GPU is actually ready, not at boot. amdgpu
+  # takes ~30s to initialize on Strix Halo; A udev rule pulls ollama in the
+  # moment /dev/kfd appears. By then ROCm is ready and ollama starts cleanly
+  # without racing or CPU fallback.
+  systemd.services.ollama.wantedBy = lib.mkForce [ ];
+  services.udev.extraRules = ''
+    KERNEL=="kfd", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ollama.service"
+  '';
 }
