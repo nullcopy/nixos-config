@@ -8,7 +8,7 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ./yubikey-luks.nix # for Yubikey-based FDE
+    ./luks.nix
     ./ollama.nix
     ../../common/desktop.nix
   ];
