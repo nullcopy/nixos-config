@@ -127,5 +127,10 @@ in
         Mod+Shift+4 hotkey-overlay-title=null { move-column-to-workspace 4; }
         Mod+Shift+5 hotkey-overlay-title=null { move-column-to-workspace 5; }
     }
+
+    switch-events {
+        // Lock screen on laptop lid close
+        lid-close { spawn "${qs}" "ipc" "-p" "${shellPath}" "call" "lockScreen" "lock"; }
+    }
   '';
 }
