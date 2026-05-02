@@ -29,10 +29,13 @@ let
       # Add/remove entries as you pull models. The keys must match the
       # exact ollama tag.
       models = {
-        "qwen3-coder:30b".name = "Qwen3 Coder 30B";
+        "llama3.2:3b".name = "Llama 3.2 3B";
         "qwen2.5-coder:32b".name = "Qwen2.5 Coder 32B";
         "gpt-oss:20b".name = "GPT-OSS 20B";
         "gpt-oss:120b".name = "GPT-OSS 120B";
+        "granite4.1:30b".name = "Granite 4.1 30B";
+        "qwen3-coder:30b".name = "Qwen3 Coder 30B";
+        "qwen3.6:35b".name = "Qwen 3.6 35B";
       };
     };
 
