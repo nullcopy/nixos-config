@@ -13,15 +13,17 @@ devShells/
   default.nix          # kitchen-sink dev shell (see "devShells")
 hosts/
   wisp/                # per-machine module
-    configuration.nix  # imports hw + desktop + ollama + user group
+    configuration.nix  # imports hw + luks + ollama + desktop + user group
     hardware-configuration.nix
-    yubikey-luks.nix   # Yubikey 2FA LUKS unlock
+    luks.nix           # stage-1 systemd + FIDO2 LUKS unlock
     ollama.nix         # ROCm ollama + GTT tuning for Strix Halo iGPU
 users/
   nullcopy/
     configuration.nix  # home-manager module (imports the files below)
     aliases.nix        # zsh + oh-my-zsh-style git aliases
     neovim.nix         # nixvim config (AstroNvim-flavoured UX)
+    niri.nix           # niri keybindings wired to Noctalia IPC
+    opencode.nix       # opencode pointed at the local ollama service
     tailscale.nix      # per-user `tailscale up` service
     noctalia/          # tracked noctalia-shell config (see "Noctalia")
 ```
@@ -34,8 +36,7 @@ Machine configs are organized by host name, so pick a <name> (e.g. wisp) and fol
 
 ### Install NixOS and configure the system with this flake.
 
-1. Boot the NixOS installer and partition/format as you like.
-  * See [my guide](https://coldnoise.net/posts/2026/yubikey-full-disk-encryption-nixos) to use [ykluks-tools](https://github.com/nullcopy/ykluks-tools) to configure NixOS with Yubikey-based full-disk encryption.
+1. Boot the NixOS installer and partition/format as you like. For full-disk encryption, create a LUKS2 volume on your root partition; `hosts/wisp/luks.nix` unlocks it via stage-1 systemd + a FIDO2 token (any FIDO2 device — YubiKey 5, SoloKey, Token2, etc.). Enroll the token after install with the `systemd-cryptenroll` invocation in the comment at the top of that file.
 1. Generate hardware config into a mounted target:
    ```
    nixos-generate-config --root /mnt
@@ -104,5 +105,4 @@ To add another shell, drop a file like `./devShells/embedded-arm.nix` (a functio
 
 ## Notes
 
-- `hosts/wisp/yubikey-luks.nix` pins a nixpkgs fork with a `luksroot.nix` patch for Yubikey salt rotation. Unpin once the fix is upstream.
 - `system.stateVersion` and `home.stateVersion` track the initial install — do not bump them on existing machines.

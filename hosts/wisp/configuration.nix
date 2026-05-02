@@ -17,6 +17,7 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
   boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.kernelModules = [ "uvcvideo" ]; # USB webcam
 
   ## ----- hardware ------------------------------------------------------------
   hardware.graphics.enable = true;
@@ -34,6 +35,7 @@
       "wheel"
       "networkmanager"
       "audio"
+      "video"
     ];
   };
 
