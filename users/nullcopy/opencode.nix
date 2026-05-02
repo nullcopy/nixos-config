@@ -14,7 +14,7 @@ let
   # opencode's model selector is "<providerID>/<modelID>". The provider
   # ID below is "ollama", and the modelID is the ollama tag (e.g.
   # "qwen3-coder:30b") — same string you'd pass to `ollama pull`.
-  defaultModel = "ollama/qwen3-coder:30b";
+  defaultModel = "ollama/qwen3.6:35b";
 
   opencodeConfig = {
     "$schema" = "https://opencode.ai/config.json";
