@@ -23,6 +23,7 @@
     fzf
     grayjay
     nautilus
+    transmission_4-gtk
   ];
 
   ## ----- session variables ---------------------------------------------------
