@@ -66,7 +66,12 @@ pkgs.mkShell {
   # `nix develop` always spawns bashInteractive, dropping starship,
   # aliases, completions, etc. Re-exec into zsh so interactive config
   # loads (zsh reads ~/.zshrc / $ZDOTDIR/.zshrc on its own).
+  #
+  # Also override $SHELL: `nix develop` points it at the devShell's bash,
+  # which child processes (e.g. nvim's toggleterm via `vim.o.shell`) then
+  # spawn instead of zsh, yielding a config-less shell.
   shellHook = ''
+    export SHELL=${pkgs.zsh}/bin/zsh
     exec ${pkgs.zsh}/bin/zsh
   '';
 }
