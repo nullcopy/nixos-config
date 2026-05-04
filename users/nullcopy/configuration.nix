@@ -55,6 +55,15 @@
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
+    history = {
+      path = "${config.home.homeDirectory}/.zsh_history";
+      size = 100000;
+      save = 100000;
+      share = true;
+      extended = true;
+      ignoreDups = true;
+      ignoreSpace = true;
+    };
     historySubstringSearch = {
       enable = true;
       # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
