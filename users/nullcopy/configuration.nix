@@ -24,6 +24,7 @@
     grayjay
     nautilus
     transmission_4-gtk
+    signal-desktop
   ];
 
   ## ----- session variables ---------------------------------------------------
