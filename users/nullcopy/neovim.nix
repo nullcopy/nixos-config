@@ -105,7 +105,6 @@ in
       # -----------------------------------------------------------------------
       treesitter = {
         enable = true;
-        folding.enable = true; # expose fold ranges for nvim-ufo
         settings = {
           ensure_installed = "all";
           highlight.enable = true;
@@ -177,12 +176,6 @@ in
               preview_cutoff = 80; # hide preview only if terminal is < 80 cols
             };
           };
-        };
-        keymaps = {
-          "<leader>ff" = "find_files";
-          "<leader>fw" = "live_grep";
-          "<leader>fb" = "buffers";
-          "<leader>fc" = "git_commits";
         };
       };
       # File-type icons used by neo-tree, telescope, bufferline, lualine.
@@ -640,17 +633,63 @@ in
         action = "<cmd>BufferLineMovePrev<cr>";
         options.desc = "Move buffer left";
       }
+      # Smart close: keep nvim alive when closing the last listed buffer.
       {
         mode = "n";
         key = "<leader>c";
-        action = "<cmd>bdelete<cr>";
+        action = "<cmd>BufferClose<cr>";
         options.desc = "Close buffer";
       }
       {
         mode = "n";
         key = "<leader>C";
-        action = "<cmd>bdelete!<cr>";
+        action = "<cmd>BufferClose!<cr>";
         options.desc = "Force close buffer";
+      }
+      {
+        mode = "n";
+        key = "<leader>bb";
+        action = "<cmd>BufferLinePick<cr>";
+        options.desc = "Pick buffer";
+      }
+      {
+        mode = "n";
+        key = "<leader>bd";
+        action = "<cmd>BufferLinePickClose<cr>";
+        options.desc = "Pick close buffer";
+      }
+      {
+        mode = "n";
+        key = "<leader>bc";
+        action = "<cmd>BufferLineCloseOthers<cr>";
+        options.desc = "Close other buffers";
+      }
+      {
+        mode = "n";
+        key = "<leader>bC";
+        action.__raw = ''
+          function()
+            local cur = vim.api.nvim_get_current_buf()
+            for _, b in ipairs(vim.api.nvim_list_bufs()) do
+              if b ~= cur and vim.fn.buflisted(b) == 1 then
+                pcall(vim.api.nvim_buf_delete, b, { force = true })
+              end
+            end
+          end
+        '';
+        options.desc = "Force close other buffers";
+      }
+      {
+        mode = "n";
+        key = "<leader>bl";
+        action = "<cmd>BufferLineCloseLeft<cr>";
+        options.desc = "Close buffers to the left";
+      }
+      {
+        mode = "n";
+        key = "<leader>br";
+        action = "<cmd>BufferLineCloseRight<cr>";
+        options.desc = "Close buffers to the right";
       }
       {
         mode = "n";
@@ -663,6 +702,32 @@ in
         key = "<leader>bP";
         action = "<cmd>BufferLineGroupClose ungrouped<cr>";
         options.desc = "Close unpinned buffers";
+      }
+
+      # ---- Find (telescope) -------------------------------------------------
+      {
+        mode = "n";
+        key = "<leader>ff";
+        action.__raw = "function() require('telescope.builtin').find_files() end";
+        options.desc = "Find files";
+      }
+      {
+        mode = "n";
+        key = "<leader>fw";
+        action.__raw = "function() require('telescope.builtin').live_grep() end";
+        options.desc = "Find word (live grep)";
+      }
+      {
+        mode = "n";
+        key = "<leader>fb";
+        action.__raw = "function() require('telescope.builtin').buffers() end";
+        options.desc = "Find buffers";
+      }
+      {
+        mode = "n";
+        key = "<leader>fc";
+        action.__raw = "function() require('telescope.builtin').git_commits() end";
+        options.desc = "Find git commits";
       }
 
       # ---- File explorer (neo-tree) -----------------------------------------
@@ -846,6 +911,22 @@ in
         vim.b.disable_autoformat = false
         vim.g.disable_autoformat = false
       end, { desc = 'Re-enable autoformat-on-save' })
+
+      -- Smart buffer close: switch to another listed buffer first (creating an
+      -- empty one if this is the last) so we don't quit nvim. Bang forces.
+      vim.api.nvim_create_user_command('BufferClose', function(args)
+        local target = vim.api.nvim_get_current_buf()
+        local listed = vim.tbl_filter(
+          function(b) return vim.fn.buflisted(b) == 1 end,
+          vim.api.nvim_list_bufs()
+        )
+        if #listed <= 1 then
+          vim.cmd('enew')
+        else
+          vim.cmd('bnext')
+        end
+        pcall(vim.api.nvim_buf_delete, target, { force = args.bang })
+      end, { desc = 'Close buffer without quitting nvim', bang = true })
     '';
 
     # =========================================================================
