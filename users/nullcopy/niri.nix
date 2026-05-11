@@ -38,6 +38,7 @@ in
             tap
             natural-scroll
         }
+        focus-follows-mouse
     }
 
     binds {
