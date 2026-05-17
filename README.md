@@ -23,6 +23,9 @@ hosts/
     hardware-configuration.nix
     luks.nix           # stage-1 systemd + FIDO2 LUKS unlock
     ollama.nix         # ROCm ollama + GTT tuning for Strix Halo iGPU
+  eregion/             # family desktop
+    configuration.nix  # imports hw + restrict-internet + users
+    hardware-configuration.nix
 users/
   nullcopy/
     configuration.nix  # home-manager module (imports the files below)
@@ -133,7 +136,10 @@ To add another shell, drop a file like `./devShells/embedded-arm.nix` (a functio
 
 ## Noctalia config
 
-`users/nullcopy/noctalia/` is the tracked copy of `~/.config/noctalia/`. On first activation it is seeded into `$HOME` as writable files so the shell's UI can save changes. On every rebuild the activation script diffs the live dir against the flake copy and prints an `M` / `-` / `?` drift report with the exact `cp` / `rm` commands to reconcile. To ignore a runtime state file, add its basename to `noctaliaDriftExcludes` at the top of `users/nullcopy/configuration.nix`.
+`users/nullcopy/noctalia/` is the tracked copy of `~/.config/noctalia/`. The home-manager config wires this up in two steps:
+
+1. **Activation**: creates `~/.nixos-config → /etc/nixos` on every rebuild (requires the repo to be at `/etc/nixos`).
+2. **Symlink**: `~/.config/noctalia` is symlinked to `/etc/nixos/users/nullcopy/noctalia` via `mkOutOfStoreSymlink`, so any settings saved through the Noctalia UI land directly in the repo as unstaged edits.
 
 ## Notes
 

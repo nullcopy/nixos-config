@@ -1,5 +1,4 @@
 {
-  config,
   pkgs,
   inputs,
   ...
@@ -7,90 +6,39 @@
 
 {
   imports = [
-    inputs.noctalia.homeModules.default
+    ../shared/base.nix
+    ../shared/desktops/niri-noctalia
     inputs.nixvim.homeModules.nixvim
     ./tailscale.nix
     ./aliases.nix
     ./neovim.nix
-    ./niri.nix
     ./opencode.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
+  # Shell base (../shared/base.nix) + GUI baseline (the niri-noctalia desktop).
   home.packages = with pkgs; [
-    brave
-    nerd-fonts.jetbrains-mono
-    fzf
     grayjay
-    nautilus
     transmission_4-gtk
     signal-desktop
     tldr
     tor-browser
   ];
 
-  ## ----- session variables ---------------------------------------------------
-  home.sessionVariables = {
-    BROWSER = "brave";
-    TERMINAL = "alacritty";
-  };
-
-  ## ----- default applications ------------------------------------------------
-  xdg.mimeApps = {
-    enable = true;
-    defaultApplications = {
-      "text/html" = "brave-browser.desktop";
-      "x-scheme-handler/http" = "brave-browser.desktop";
-      "x-scheme-handler/https" = "brave-browser.desktop";
-      "x-scheme-handler/about" = "brave-browser.desktop";
-      "x-scheme-handler/unknown" = "brave-browser.desktop";
-    };
-  };
-
   ## ----- programs ------------------------------------------------------------
-  programs.noctalia-shell = {
+  # zsh/starship base lives in ../shared/base.nix; this only adds the
+  # substring-search keybindings on top.
+  programs.zsh.historySubstringSearch = {
     enable = true;
-    # Noctalia upstream deprecated systemd startup — it causes delayed start
-    # and unreliable IPC. The shell is spawned from niri's spawn-at-startup
-    # instead. See https://docs.noctalia.dev/v4/getting-started/nixos/#running-the-shell
-    # settings/colors/plugins are managed via mkOutOfStoreSymlink below so UI
-    # changes persist back into the flake repo as unstaged edits.
-  };
-
-  programs.zsh = {
-    enable = true;
-    autosuggestion.enable = true;
-    history = {
-      path = "${config.home.homeDirectory}/.zsh_history";
-      size = 100000;
-      save = 100000;
-      share = true;
-      extended = true;
-      ignoreDups = true;
-      ignoreSpace = true;
-    };
-    historySubstringSearch = {
-      enable = true;
-      # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
-      searchUpKey = [
-        "^[[A"
-        "^[OA"
-      ]; # Up arrow
-      searchDownKey = [
-        "^[[B"
-        "^[OB"
-      ]; # Down arrow
-    };
-  };
-
-  programs.starship = {
-    enable = true;
-    presets = [ "gruvbox-rainbow" ];
-  };
-
-  programs.alacritty = {
-    enable = true;
-    settings.font.normal.family = "JetBrainsMono Nerd Font";
+    # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
+    searchUpKey = [
+      "^[[A"
+      "^[OA"
+    ]; # Up arrow
+    searchDownKey = [
+      "^[[B"
+      "^[OB"
+    ]; # Down arrow
   };
 
   # direnv: per-directory environment loader. When you `cd` into a directory
@@ -125,13 +73,6 @@
       tag.gpgsign = true;
     };
   };
-
-  ## ----- xdg config files ---------------------------------------------------
-  # Symlink the entire ~/.config/noctalia directory (not individual files inside
-  # it) because noctalia uses atomic write-and-rename when saving, which would
-  # otherwise replace per-file symlinks with regular files on every save.
-  xdg.configFile."noctalia".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia";
 
   ## ----- state version -------------------------------------------------------
   # Don't change this unless you know what you're doing
