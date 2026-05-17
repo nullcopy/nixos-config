@@ -74,6 +74,26 @@
             }
           ];
         };
+
+        ## ----- eregion laptop config -------------------------------------------
+        eregion = nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./common/configuration.nix
+            ./hosts/eregion/configuration.nix
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = { inherit inputs; };
+              home-manager.users.nullcopy = import ./users/nullcopy/configuration.nix;
+              home-manager.users.vbug = import ./users/vbug/configuration.nix;
+              home-manager.users.zed = import ./users/zed/configuration.nix;
+            }
+          ];
+        };
+
       };
     };
 }
