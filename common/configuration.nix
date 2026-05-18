@@ -71,5 +71,6 @@
     magic-wormhole
     nixfmt
     tree
+    pv
   ];
 }
