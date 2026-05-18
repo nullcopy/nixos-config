@@ -927,6 +927,42 @@ in
         end
         pcall(vim.api.nvim_buf_delete, target, { force = args.bang })
       end, { desc = 'Close buffer without quitting nvim', bang = true })
+
+      -- Toggle rust-analyzer's active cargo feature set for the running
+      -- client. rust-analyzer rebuilds its crate graph on
+      -- workspace/didChangeConfiguration — no LspRestart needed, but
+      -- re-indexing takes a moment.
+      --
+      -- Usage:
+      --   :RaFeatures all          -- index with every feature (--all-features)
+      --   :RaFeatures foo,bar      -- index only the listed features
+      --   :RaFeatures serde,tokio  -- (another concrete example)
+      --   :RaFeatures              -- reset to the crate's default features
+      vim.api.nvim_create_user_command('RaFeatures', function(args)
+        local features
+        if args.args == 'all' then
+          features = 'all'
+        elseif args.args == "" then
+          features = {}
+        else
+          features = vim.split(args.args, ',', { trimempty = true })
+        end
+        local clients = vim.lsp.get_clients({ name = 'rust_analyzer' })
+        if #clients == 0 then
+          vim.notify('RaFeatures: no rust-analyzer client attached', vim.log.levels.WARN)
+          return
+        end
+        for _, c in ipairs(clients) do
+          c.settings = vim.tbl_deep_extend('force', c.settings or {}, {
+            ['rust-analyzer'] = { cargo = { features = features } },
+          })
+          c.notify('workspace/didChangeConfiguration', { settings = c.settings })
+        end
+        vim.notify('rust-analyzer features: ' .. vim.inspect(features))
+      end, {
+        nargs = '?',
+        desc = 'Set rust-analyzer cargo features (all | foo,bar | <empty>)',
+      })
     '';
 
     # =========================================================================
