@@ -32,26 +32,38 @@ Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
 
 ## First-time setup on a new machine
 
-Machine configs are organized by host name, so pick a <name> (e.g. wisp) and follow the steps below.
+Machine configs are organized by host name, so pick a `<name>` (e.g. `wisp`) and follow the steps below.
 
 ### Install NixOS and configure the system with this flake.
 
-1. Boot the NixOS installer and partition/format as you like. For full-disk encryption, create a LUKS2 volume on your root partition; `hosts/wisp/luks.nix` unlocks it via stage-1 systemd + a FIDO2 token (any FIDO2 device — YubiKey 5, SoloKey, Token2, etc.). Enroll the token after install with the `systemd-cryptenroll` invocation in the comment at the top of that file.
-1. Generate hardware config into a mounted target:
-   ```
-   nixos-generate-config --root /mnt
-   ```
-1. Clone this flake somewhere persistent (e.g. `~/.nixos-config`) and drop the generated `hardware-configuration.nix` into `hosts/<name>/`.
-1. Inside the cloned flake: `mkdir hosts/<name>` and copy a generated `hardware-configuration.nix` into it.
-1. Create `hosts/<name>/configuration.nix`.
-  * See one of the existing host configs for a template, e.g. [hosts/wisp/configuration.nix](hosts/wisp/configuration.nix)
-1. Add an entry for this host to `flake.nix` under `nixosConfigurations` (mirroring `wisp`)
-1. Point `home-manager.users.<you>` at the user module you want on this host.
-1. Install:
-   ```
-   nixos-install --flake /mnt/etc/nixos#<name>
-   ```
-1. Reboot, log in as root, set user password with `passwd`.
+`scripts/nixos-install.sh` automates the full installation. Before running it, edit the four variables at the top of the script:
+
+```bash
+DISK=/dev/nvme0n1               # target disk — double-check with lsblk
+FLAKE_REPO="https://github.com/nullcopy/nixos-config"
+HOSTNAME="myNewNixosComputer"   # must match nixosConfigurations.<name> in flake.nix
+ADMINUSER="myAdminUser"         # wheel-group user defined in your host config
+```
+
+Then, from the NixOS live environment, download it, edit the variables, and run it as root:
+
+```bash
+curl -O https://raw.githubusercontent.com/nullcopy/nixos-config/main/scripts/nixos-install.sh
+vim nixos-install.sh   # set DISK, HOSTNAME, ADMINUSER
+bash nixos-install.sh
+```
+
+The script will:
+1. Partition and format the disk (GPT, EFI + LUKS2-encrypted btrfs root with subvolumes).
+2. Clone this flake to `/mnt/etc/nixos` and generate `hardware-configuration.nix`.
+3. Drop you into an interactive shell so you can make any necessary edits — at minimum:
+   - Create `hosts/<name>/configuration.nix` (see [hosts/wisp/configuration.nix](hosts/wisp/configuration.nix) as a template) and make sure it imports `./hardware-configuration.nix`.
+   - Add an entry for `<name>` under `nixosConfigurations` in `flake.nix` (mirroring the `wisp` block).
+4. Run `nixos-install`, prompt for `ADMINUSER`'s password, then cleanly unmount everything.
+
+If you defined additional users, `ADMINUSER` will need to log in first and assign their passwords with `passwd <username>`.
+
+For FIDO2 LUKS unlock, enroll a token after the first boot with the `systemd-cryptenroll` command shown in the comment at the top of `hosts/wisp/luks.nix`.
 
 ### Enable the pre-commit hook
 
