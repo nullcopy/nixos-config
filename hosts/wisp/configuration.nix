@@ -10,7 +10,6 @@
     ./hardware-configuration.nix
     ./luks.nix
     ./ollama.nix
-    ../../common/desktop.nix
   ];
 
   ## ----- boot ----------------------------------------------------------------

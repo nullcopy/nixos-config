@@ -38,6 +38,15 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
+      # All .nix files in common/ are automatically applied to every host.
+      # Drop a file there and it's picked up on the next rebuild — no manual
+      # import needed in flake.nix or any host config.
+      commonModules = builtins.map (name: ./common/${name}) (
+        builtins.filter (name: nixpkgs.lib.hasSuffix ".nix" name) (
+          builtins.attrNames (builtins.readDir ./common)
+        )
+      );
+
       # Each shell lives in its own file under ./devShells; add a new one by
       # dropping a file there and listing it below. There is no `default` —
       # always pick a language with `nix develop /path/to/this/flake#<lang>`.
@@ -80,8 +89,7 @@
         wisp = nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = { inherit inputs; };
-          modules = [
-            ./common/configuration.nix
+          modules = commonModules ++ [
             ./hosts/wisp/configuration.nix
             home-manager.nixosModules.home-manager
             {
@@ -93,12 +101,11 @@
           ];
         };
 
-        ## ----- eregion laptop config -------------------------------------------
+        ## ----- eregion desktop config ------------------------------------------
         eregion = nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = { inherit inputs; };
-          modules = [
-            ./common/configuration.nix
+          modules = commonModules ++ [
             ./hosts/eregion/configuration.nix
             home-manager.nixosModules.home-manager
             {
