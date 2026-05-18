@@ -25,6 +25,7 @@
     nautilus
     transmission_4-gtk
     signal-desktop
+    tldr
   ];
 
   ## ----- session variables ---------------------------------------------------
