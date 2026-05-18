@@ -1,37 +1,23 @@
 {
-  config,
   pkgs,
-  inputs,
   ...
 }:
 
 {
+  imports = [
+    ../shared/base.nix
+    ../shared/desktops/niri-noctalia
+  ];
+
   ## ----- packages ------------------------------------------------------------
+  # Shell base (../shared/base.nix) + GUI baseline (the niri-noctalia desktop).
   home.packages = with pkgs; [
-    brave
-    fzf
+    mypaint
+    libreoffice
+    joplin-desktop
   ];
 
   ## ----- programs ------------------------------------------------------------
-  programs.zsh = {
-    enable = true;
-    autosuggestion.enable = true;
-    history = {
-      path = "${config.home.homeDirectory}/.zsh_history";
-      size = 100000;
-      save = 100000;
-      share = true;
-      extended = true;
-      ignoreDups = true;
-      ignoreSpace = true;
-    };
-  };
-
-  programs.starship = {
-    enable = true;
-    presets = [ "gruvbox-rainbow" ];
-  };
-
   programs.git = {
     enable = true;
     settings = {
