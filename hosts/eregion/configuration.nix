@@ -9,6 +9,7 @@
   imports = [
     ./hardware-configuration.nix
     ../../common/desktop.nix
+    ../../modules/net-disable.nix
   ];
 
   ## ----- boot ----------------------------------------------------------------
@@ -36,7 +37,6 @@
     isNormalUser = true;
     shell = pkgs.zsh;
     extraGroups = [
-      "networkmanager"
       "audio"
       "video"
     ];
@@ -46,11 +46,16 @@
     isNormalUser = true;
     shell = pkgs.zsh;
     extraGroups = [
-      "networkmanager"
       "audio"
       "video"
     ];
   };
+
+  ## ----- firewall -------------------------------------------------------------
+  custom.restrictInternet = [
+    "vbug"
+    "zed"
+  ];
 
   ## ----- state version -------------------------------------------------------
   # Don't change this unless you know what you're doing
