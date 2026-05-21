@@ -26,6 +26,7 @@
     transmission_4-gtk
     signal-desktop
     tldr
+    tor-browser
   ];
 
   ## ----- session variables ---------------------------------------------------
