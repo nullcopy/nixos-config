@@ -956,7 +956,7 @@ in
           c.settings = vim.tbl_deep_extend('force', c.settings or {}, {
             ['rust-analyzer'] = { cargo = { features = features } },
           })
-          c.notify('workspace/didChangeConfiguration', { settings = c.settings })
+          c:notify('workspace/didChangeConfiguration', { settings = c.settings })
         end
         vim.notify('rust-analyzer features: ' .. vim.inspect(features))
       end, {
