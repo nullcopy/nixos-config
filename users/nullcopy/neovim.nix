@@ -75,7 +75,7 @@ in
       sidescrolloff = 8;
 
       # -- Completion & responsiveness
-      completeopt = "menuone,noselect,noinsert";
+      completeopt = "menuone,noinsert";
       updatetime = 300;
 
       # -- Files / buffers
@@ -230,7 +230,17 @@ in
       blink-cmp = {
         enable = true;
         settings = {
-          keymap.preset = "default"; # Tab accepts; <C-n>/<C-p> cycle
+          keymap = {
+            preset = "enter";
+            "<C-j>" = [
+              "select_next"
+              "fallback"
+            ];
+            "<C-k>" = [
+              "select_prev"
+              "fallback"
+            ];
+          };
           sources.default = [
             "lsp"
             "path"
