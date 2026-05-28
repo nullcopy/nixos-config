@@ -6,7 +6,7 @@ let
   # way to address its IPC handlers is `qs ipc -p <path>`. Resolving via
   # config.programs.noctalia-shell.package keeps this in sync across flake
   # updates instead of hardcoding a /nix/store hash.
-  shellPath = "${config.programs.noctalia-shell.package}/share/noctalia-shell/shell.qml";
+  shellPath = "${config.programs.noctalia-shell.package}/share/noctalia-shell";
 
   # Helper: noctalia bind with a friendly hotkey-overlay title.
   nocta =
