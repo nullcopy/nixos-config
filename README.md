@@ -10,7 +10,13 @@ common/
   configuration.nix    # base system (nix, locale, net, audio, base pkgs)
   desktop.nix          # niri + greetd + xdg portals
 devShells/
-  default.nix          # kitchen-sink dev shell (see "devShells")
+  rust.nix             # fenix toolchain + bindgen deps (see "devShells")
+  python.nix
+  go.nix
+  c.nix
+  lua.nix
+  nix.nix
+  bash.nix
 hosts/
   wisp/                # per-machine module
     configuration.nix  # imports hw + luks + ollama + desktop + user group
@@ -107,9 +113,23 @@ nix flake lock --update-input nixpkgs   # bump one input
 
 ## devShells
 
-`devShells/default.nix` is a kitchen-sink shell covering every language used by the nixvim LSP config — a fallback for ad-hoc work in projects that don't ship their own flake. Real projects should define their own `devShells.default` and load it via direnv (`echo 'use flake' > .envrc && direnv allow`).
+One shell per language, covering the tooling used by the nixvim LSP config — a fallback for ad-hoc work in projects that don't ship their own flake. Real projects should still define their own `devShells.default` and load it via direnv (`echo 'use flake' > .envrc && direnv allow`).
 
-To add another shell, drop a file like `./devShells/embedded-arm.nix` (a function taking `{ pkgs, system, fenix }`) and list it in `flake.nix` alongside `default`. Enter named shells with `nix develop /path/to/flake#<name>`.
+There is no `default` shell; always pick one explicitly:
+
+```
+nix develop /path/to/flake#rust
+nix develop /path/to/flake#python
+nix develop /path/to/flake#go
+nix develop /path/to/flake#c
+nix develop /path/to/flake#lua
+nix develop /path/to/flake#nix
+nix develop /path/to/flake#bash
+```
+
+`#rust` includes `rustPlatform.bindgenHook`, which sets `LIBCLANG_PATH` and `BINDGEN_EXTRA_CLANG_ARGS` so bindgen-based crates (`librocksdb-sys`, `zcash_script`, `ring`, …) build without the user setting anything by hand.
+
+To add another shell, drop a file like `./devShells/embedded-arm.nix` (a function taking `{ pkgs, system, fenix }` and returning a `pkgs.mkShell { … }`) and list it in `flake.nix`. Enter it with `nix develop /path/to/flake#embedded-arm`. The zsh re-exec is applied centrally by `mkDevShell` in `flake.nix`, so per-language files don't repeat it.
 
 ## Noctalia config
 

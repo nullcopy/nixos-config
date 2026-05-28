@@ -39,21 +39,39 @@
       pkgs = nixpkgs.legacyPackages.${system};
 
       # Each shell lives in its own file under ./devShells; add a new one by
-      # dropping a file there and listing it below. Enter with
-      # `nix develop /path/to/this/flake` (or `#<name>` for a non-default).
-      mkDevShell = file: import file { inherit pkgs system fenix; };
+      # dropping a file there and listing it below. There is no `default` —
+      # always pick a language with `nix develop /path/to/this/flake#<lang>`.
+      #
+      # mkDevShell appends a shellHook that re-execs into zsh. `nix develop`
+      # always spawns bashInteractive, dropping starship, aliases, completions,
+      # etc; and it points $SHELL at that bash so child processes (e.g. nvim's
+      # toggleterm via vim.o.shell) inherit a config-less shell. Overriding
+      # $SHELL and exec'ing zsh fixes both. Centralizing the hook here keeps
+      # per-language files focused on language tooling.
+      mkDevShell =
+        file:
+        (import file { inherit pkgs system fenix; }).overrideAttrs (old: {
+          shellHook = (old.shellHook or "") + ''
+            export SHELL=${pkgs.zsh}/bin/zsh
+            exec ${pkgs.zsh}/bin/zsh
+          '';
+        });
     in
     {
       formatter.${system} = pkgs.nixfmt;
 
-      # devShells: each entry sources a file under ./devShells. To add a
-      # new shell, drop e.g. `./devShells/embedded-arm.nix` (a function
-      # taking { pkgs, system, fenix }) and list it here as
-      # `embedded-arm = mkDevShell ./devShells/embedded-arm.nix;`. Enter
-      # with `nix develop /path/to/flake#embedded-arm`; the unnamed
-      # `default` is what `nix develop /path/to/flake` picks up.
+      # devShells: one per language. To add another, drop e.g.
+      # `./devShells/embedded-arm.nix` (a function taking { pkgs, system, fenix }
+      # returning a `pkgs.mkShell { ... }`) and list it here. Enter with
+      # `nix develop /path/to/flake#<name>`.
       devShells.${system} = {
-        default = mkDevShell ./devShells/default.nix;
+        rust = mkDevShell ./devShells/rust.nix;
+        python = mkDevShell ./devShells/python.nix;
+        go = mkDevShell ./devShells/go.nix;
+        c = mkDevShell ./devShells/c.nix;
+        lua = mkDevShell ./devShells/lua.nix;
+        nix = mkDevShell ./devShells/nix.nix;
+        bash = mkDevShell ./devShells/bash.nix;
       };
 
       nixosConfigurations = {
