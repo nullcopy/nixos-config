@@ -1,23 +1,25 @@
 { config, pkgs, ... }:
 
 let
-  qs = "${pkgs.quickshell}/bin/qs";
-  # Noctalia is launched by path, not by config name — so the only reliable
-  # way to address its IPC handlers is `qs ipc -p <path>`. Resolving via
-  # config.programs.noctalia-shell.package keeps this in sync across flake
-  # updates instead of hardcoding a /nix/store hash.
-  shellPath = "${config.programs.noctalia-shell.package}/share/noctalia-shell";
+  # noctalia-shell is a wrapped `qs` with QS_CONFIG_PATH baked in (see the
+  # upstream package: ln -s ${quickshell}/bin/qs $out/bin/noctalia-shell, then
+  # wrapped with --set-default QS_CONFIG_PATH "$out/share/noctalia-shell").
+  # Invoking the *same* wrapped binary for both the daemon and the IPC client
+  # is the upstream-blessed pattern — it guarantees server and client resolve
+  # to the same instance and use the same qs build (no pkgs.quickshell vs
+  # noctalia-qs drift). See https://docs.noctalia.dev/v4/getting-started/nixos/
+  noctaliaShell = "${config.programs.noctalia-shell.package}/bin/noctalia-shell";
 
   # Helper: noctalia bind with a friendly hotkey-overlay title.
   nocta =
     title: target: fn:
-    ''hotkey-overlay-title="${title}" { spawn "${qs}" "ipc" "-p" "${shellPath}" "call" "${target}" "${fn}"; }'';
+    ''hotkey-overlay-title="${title}" { spawn "${noctaliaShell}" "ipc" "call" "${target}" "${fn}"; }'';
 
   # Helper: noctalia bind hidden from the overlay (used for XF86 keys),
   # also passable through the lock screen.
   noctaSilent =
     target: fn:
-    ''allow-when-locked=true hotkey-overlay-title=null { spawn "${qs}" "ipc" "-p" "${shellPath}" "call" "${target}" "${fn}"; }'';
+    ''allow-when-locked=true hotkey-overlay-title=null { spawn "${noctaliaShell}" "ipc" "call" "${target}" "${fn}"; }'';
 in
 
 {
@@ -40,6 +42,9 @@ in
         }
         focus-follows-mouse
     }
+
+    // Launch Noctalia with niri (replaces the deprecated systemd unit).
+    spawn-at-startup "${noctaliaShell}"
 
     binds {
         // ----- Niri ----------------------------------------------------------
@@ -131,7 +136,7 @@ in
 
     switch-events {
         // Lock screen on laptop lid close
-        lid-close { spawn "${qs}" "ipc" "-p" "${shellPath}" "call" "lockScreen" "lock"; }
+        lid-close { spawn "${noctaliaShell}" "ipc" "call" "lockScreen" "lock"; }
     }
   '';
 }

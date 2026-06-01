@@ -50,7 +50,9 @@
   ## ----- programs ------------------------------------------------------------
   programs.noctalia-shell = {
     enable = true;
-    systemd.enable = true;
+    # Noctalia upstream deprecated systemd startup — it causes delayed start
+    # and unreliable IPC. The shell is spawned from niri's spawn-at-startup
+    # instead. See https://docs.noctalia.dev/v4/getting-started/nixos/#running-the-shell
     # settings/colors/plugins are managed via mkOutOfStoreSymlink below so UI
     # changes persist back into the flake repo as unstaged edits.
   };
