@@ -6,9 +6,11 @@ Personal NixOS flake. Host configs + home-manager, keyed by machine name.
 
 ```
 flake.nix              # inputs + nixosConfigurations + devShells
-common/
+common/                # every *.nix here is auto-applied to all hosts
   configuration.nix    # base system (nix, locale, net, audio, base pkgs)
   desktop.nix          # niri + greetd + xdg portals
+modules/               # opt-in modules a host imports explicitly
+  net-disable.nix      # custom.restrictInternet: block users' outbound traffic
 devShells/
   rust.nix             # fenix toolchain + bindgen deps (see "devShells")
   python.nix
@@ -23,18 +25,29 @@ hosts/
     hardware-configuration.nix
     luks.nix           # stage-1 systemd + FIDO2 LUKS unlock
     ollama.nix         # ROCm ollama + GTT tuning for Strix Halo iGPU
-  eregion/             # family desktop
-    configuration.nix  # imports hw + restrict-internet + users
+  eregion/             # multi-user desktop
+    configuration.nix  # nullcopy + vbug/zed; vbug/zed are internet-restricted
     hardware-configuration.nix
 users/
+  shared/              # home-manager modules users import
+    base.nix           # desktop-agnostic baseline: zsh + starship + CLI tools
+    desktops/          # one self-contained module per desktop — a user picks one
+      niri-noctalia/   # the niri + Noctalia desktop
+        default.nix    # niri + noctalia-shell + alacritty + browser
+        niri.nix       # niri keybindings wired to Noctalia IPC
   nullcopy/
-    configuration.nix  # home-manager module (imports the files below)
+    configuration.nix  # imports base + niri-noctalia + the files below
     aliases.nix        # zsh + oh-my-zsh-style git aliases
     neovim.nix         # nixvim config (AstroNvim-flavoured UX)
-    niri.nix           # niri keybindings wired to Noctalia IPC
     opencode.nix       # opencode pointed at the local ollama service
     tailscale.nix      # per-user `tailscale up` service
     noctalia/          # tracked noctalia-shell config (see "Noctalia")
+  vbug/
+    configuration.nix  # imports base + niri-noctalia + own apps + git identity
+    noctalia/          # per-user noctalia config (seeded from nullcopy's)
+  zed/
+    configuration.nix  # imports base + niri-noctalia + own apps + git identity
+    noctalia/          # per-user noctalia config (seeded from nullcopy's)
 ```
 
 Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
@@ -63,6 +76,7 @@ bash nixos-install.sh
 ```
 
 The script will:
+
 1. Partition and format the disk (GPT, EFI + LUKS2-encrypted btrfs root with subvolumes).
 2. Clone this flake to `/mnt/etc/nixos` and generate `hardware-configuration.nix`.
 3. Drop you into an interactive shell so you can make any necessary edits — at minimum:
@@ -100,10 +114,14 @@ nix flake lock --update-input nixpkgs   # bump one input
 
 ## Adding a new user
 
-1. `mkdir users/<name>` and create `configuration.nix` — this is a home-manager module. Start small:
+1. `mkdir users/<name>` and create `configuration.nix` — this is a home-manager module. Import the shell baseline plus one desktop, then add your own packages:
    ```nix
-   { config, lib, pkgs, inputs, ... }:
+   { pkgs, ... }:
    {
+     imports = [
+       ../shared/base.nix              # zsh/starship/CLI baseline
+       ../shared/desktops/niri-noctalia # pick a desktop (see "Desktops")
+     ];
      home.packages = with pkgs; [ ];
      home.stateVersion = "25.11";
    }
@@ -134,13 +152,19 @@ nix develop /path/to/flake#bash
 
 To add another shell, drop a file like `./devShells/embedded-arm.nix` (a function taking `{ pkgs, system, fenix }` and returning a `pkgs.mkShell { … }`) and list it in `flake.nix`. Enter it with `nix develop /path/to/flake#embedded-arm`. The zsh re-exec is applied centrally by `mkDevShell` in `flake.nix`, so per-language files don't repeat it.
 
+## Desktops
+
+A user's desktop is one module imported from `users/shared/desktops/`. Today there's only `niri-noctalia/`, but the split is deliberate: `users/shared/base.nix` (zsh/starship/CLI) is desktop-agnostic and every user imports it, while the desktop module carries everything tied to a compositor (niri config, the Noctalia shell, terminal, browser, default apps). To give a user a different desktop, add a sibling directory (e.g. `users/shared/desktops/kde/`) and have that user import it instead of `niri-noctalia` — nothing else in their config changes.
+
+> System side: `common/desktop.nix` currently enables niri + greetd for every host, and greetd launches `niri-session` directly. A non-niri desktop would also need that system-level session wired up; the home-manager split above is only half the story.
+
 ## Noctalia config
 
-`users/nullcopy/noctalia/` is the tracked copy of `~/.config/noctalia/`. The home-manager config wires this up in two steps:
+The niri-noctalia desktop module points each user's `~/.config/noctalia` at `/etc/nixos/users/<name>/noctalia` with an out-of-store symlink (`mkOutOfStoreSymlink`, target derived from the username), so settings saved through the Noctalia UI land directly in the repo as unstaged edits. This assumes the flake lives at `/etc/nixos` (where the install script clones it). The whole directory is symlinked, not individual files, because Noctalia saves via atomic write-and-rename.
 
-1. **Activation**: creates `~/.nixos-config → /etc/nixos` on every rebuild (requires the repo to be at `/etc/nixos`).
-2. **Symlink**: `~/.config/noctalia` is symlinked to `/etc/nixos/users/nullcopy/noctalia` via `mkOutOfStoreSymlink`, so any settings saved through the Noctalia UI land directly in the repo as unstaged edits.
+Each user has their own tracked config under `users/<name>/noctalia/`. `vbug` and `zed` are seeded from a copy of nullcopy's `settings.json` with his personal bits stripped (avatar, wallpaper directory, location, the laptop-only widget, the custom plugin); Noctalia rewrites the file in place as they tweak it.
 
 ## Notes
 
 - `system.stateVersion` and `home.stateVersion` track the initial install — do not bump them on existing machines.
+- To block a user's outbound traffic, import `modules/net-disable.nix` in the host and set `custom.restrictInternet = [ "user" … ];`. It drops non-loopback traffic owned by those users via iptables/ip6tables owner rules (see `eregion` for an example).
