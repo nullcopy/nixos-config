@@ -60,6 +60,9 @@
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
+    initContent = ''
+      export PATH="$HOME/.cargo/bin:$PATH"
+    '';
     history = {
       path = "${config.home.homeDirectory}/.zsh_history";
       size = 100000;
