@@ -30,6 +30,7 @@ pkgs.mkShell {
     prettier
 
     cargo-audit
+    cargo-vet
   ];
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
