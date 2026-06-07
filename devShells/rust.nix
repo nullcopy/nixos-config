@@ -28,6 +28,8 @@ pkgs.mkShell {
 
     taplo
     prettier
+
+    cargo-audit
   ];
 
   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
