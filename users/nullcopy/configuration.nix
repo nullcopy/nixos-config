@@ -27,6 +27,7 @@
     signal-desktop
     tldr
     tor-browser
+    ripgrep
   ];
 
   ## ----- session variables ---------------------------------------------------
