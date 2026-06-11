@@ -2,12 +2,12 @@
 auto_hide = true
 layer = "overlay"
 reserve_space = false
-start = [ "group:g1" ]
+start = [ "group:g1", "workspaces" ]
 
     [[bar.default.capsule_group]]
     fill = "surface_variant"
     id = "g1"
-    members = [ "cpu", "workspaces" ]
+    members = [ "cpu", "ram", "temp" ]
     opacity = 1.0
     padding = 6.0
 
@@ -61,11 +61,13 @@ widget_order = [ "lockscreen-login-box@eDP-1", "lockscreen-login-box@HDMI-A-1" ]
 [nightlight]
 enabled = true
 
+[plugins]
+enabled = []
+
 [shell]
 offline_mode = true
 
     [shell.panel]
-    control_center_placement = "centered"
     transparency_mode = "soft"
 
 [theme]
