@@ -10,8 +10,8 @@
     ./hardware-configuration.nix
     ./luks.nix
     ./ollama.nix
-    # Role modules this host opts into. A headless host would import none of
-    # these; the greeter (one per machine) is always chosen here
+    # Role modules for this machine. Graphical hosts import exactly one
+    # greeter from modules/greeters/; headless hosts import none of these.
     ../../modules/audio.nix
     ../../modules/bluetooth.nix
     ../../modules/networkmanager.nix

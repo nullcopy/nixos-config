@@ -1,14 +1,13 @@
 { lib, pkgs, ... }:
 
-## The greeter is HOST config: exactly one greeter can own the seat, so a
-## graphical host imports one module from modules/greeters/ — a greeter is
-## never part of a user's desktop config.
+## greetd + tuigreet. Greeters are imported by hosts rather than by user
+## desktop configs: only one greeter can own the seat, so each graphical host
+## imports exactly one module from modules/greeters/.
 ##
-## tuigreet here is desktop-agnostic: it lists every session that users'
-## desktop configs install into the system profile (e.g. programs.niri.enable
-## drops niri.desktop into share/wayland-sessions) and remembers each user's
-## last choice. Adding a new WM/desktop never touches this file — its session
-## just shows up in the list.
+## tuigreet is desktop-agnostic: it lists every session installed into the
+## system profile (e.g. programs.niri.enable drops niri.desktop into
+## share/wayland-sessions) and remembers each user's last choice, so new
+## desktops show up at the login screen without any change here.
 {
   services.greetd = {
     enable = true;

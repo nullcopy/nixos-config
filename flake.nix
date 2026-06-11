@@ -48,10 +48,10 @@
       #                       (home.nix), and — only on graphical hosts, only if
       #                       the user defines one — their desktop (desktop.nix)
       #
-      # `graphical = false` declares a headless host: same users, same CLI
-      # homes, but every users/<user>/desktop.nix is skipped so no compositor
-      # or GUI package enters the closure. (The greeter is host config — a
-      # headless host simply doesn't import one from modules/greeters/.)
+      # `graphical = false` builds a headless host: users keep their full CLI
+      # homes, but every users/<user>/desktop.nix is skipped, so no compositor
+      # or GUI package enters the closure. A headless host's configuration.nix
+      # also imports no greeter from modules/greeters/.
       mkHost =
         {
           hostname,

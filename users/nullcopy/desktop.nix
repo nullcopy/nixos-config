@@ -5,13 +5,12 @@
   ...
 }:
 
-## nullcopy's desktop: niri + Noctalia. Included by mkHost only on graphical
-## hosts; never evaluated on headless ones. The user — not the host — owns
-## this choice: this file plus ./desktop-home.nix and ./niri.nix are the
-## complete definition, so another user wanting the same desktop copies those
-## three files into users/<them>/ and edits the username below. The greeter is
-## NOT defined here — it's host config (see modules/greeters/) because a
-## machine can only run one.
+## nullcopy's desktop: niri + Noctalia. mkHost imports this file on graphical
+## hosts and skips it on headless ones. Together with ./desktop-home.nix and
+## ./niri.nix it is the complete desktop definition; to reuse it, copy the
+## three files into another users/<name>/ and change the username below.
+## Greeters are imported per host from modules/greeters/, since a machine
+## runs exactly one.
 {
   # Enabling niri also installs its session file into
   # /run/current-system/sw/share/wayland-sessions, which is how the host's

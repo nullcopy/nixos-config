@@ -1,7 +1,7 @@
 # nixos-config
 
-Personal NixOS flake: multiple hosts, multiple users, with desktops chosen
-per user and headless hosts as a first-class case.
+Personal NixOS flake for multiple hosts and multiple users. Desktops are
+configured per user; hosts can be graphical or headless.
 
 ## Layout
 
@@ -65,14 +65,14 @@ For each listed user, mkHost imports `users/<name>/system.nix`, wires
 **Desktops are a user choice; greeters are a host choice.** A desktop is
 defined entirely inside the user's own directory: `desktop.nix` (system half —
 compositor, portals, companion tools) and `desktop-home.nix` + `niri.nix`
-(home half — shell UI, terminal, keybinds). There is no shared desktop layer:
-a new user who wants the same desktop copies those files and edits the
-username in `desktop.nix`. Two users running copies of the same desktop on
-one host coexist fine — identical system options simply merge.
-The greeter, however, owns the seat — a machine can only run one — so graphical
-hosts import exactly one module from `modules/greeters/`. tuigreet is
-configured as a desktop-agnostic session chooser: every compositor enabled by
-any user's desktop installs a session file under
+(home half — shell UI, terminal, keybinds). To reuse an existing desktop,
+copy those files into another `users/<name>/` and edit the username in
+`desktop.nix`. Several users running copies of the same desktop on one host
+merge cleanly, since identical system options deduplicate.
+The greeter owns the seat — a machine can only run one — so graphical hosts
+import exactly one module from `modules/greeters/`. tuigreet is configured as
+a desktop-agnostic session chooser: every compositor enabled by any user's
+desktop installs a session file under
 `/run/current-system/sw/share/wayland-sessions`, tuigreet lists them all and
 remembers each user's last choice. Adding a new WM never touches the greeter.
 
@@ -134,13 +134,14 @@ shared by all of its users.
 
 ## Where the repo lives
 
-Rebuilds run as root (`sudo nixos-rebuild …`), so the checkout does **not**
-need to be world-readable — the admin's home works fine, and the flake is
-snapshotted into the world-readable nix store at build time regardless (which
-is also why secrets like the tailscale env file stay outside the repo). The
-one runtime path coupling is per-user: the Noctalia settings symlink points at
-`~/.nixos-config/users/<username>/noctalia-settings.toml` in *each user's own
-home*, so only users who want their UI settings tracked keep a checkout.
+Rebuilds run as root (`sudo nixos-rebuild …`), so the checkout can live in the
+admin's home directory; it does not need to be world-readable. At build time
+the flake is snapshotted into the world-readable nix store wherever the
+checkout lives, which is why secrets (e.g. the tailscale env file) stay
+outside the repo. The one runtime reference to the checkout is per-user: the
+Noctalia settings symlink points at
+`~/.nixos-config/users/<username>/noctalia-settings.toml` in each user's own
+home, so only users who track their UI settings need a checkout.
 
 ## First-time setup on a new machine
 
@@ -226,7 +227,7 @@ This config tracks **Noctalia v5** (a compiled Wayland shell; v4 was a QML/quick
 
 v5 splits its writable files across two XDG dirs, and the settings UI writes to the **state** dir, not the config dir:
 
-- `~/.config/noctalia/config.toml` — the base config layer. The settings UI never writes it; it's left at noctalia's built-in defaults. Pin a base value declaratively with `programs.noctalia.settings.<…>` in the bundle's `home.nix` and the module renders a read-only `config.toml`. (Custom palettes saved in the UI also land in `~/.config/noctalia/palettes/`, writeable but untracked.)
+- `~/.config/noctalia/config.toml` — the base config layer. The settings UI never writes it; it's left at noctalia's built-in defaults. Pin a base value declaratively with `programs.noctalia.settings.<…>` in `desktop-home.nix` and the module renders a read-only `config.toml`. (Custom palettes saved in the UI also land in `~/.config/noctalia/palettes/`, writeable but untracked.)
 - `~/.local/state/noctalia/settings.toml` — **everything you change in the settings UI**, layered on top of `config.toml`. This is the only writeable file we track: `users/<username>/noctalia-settings.toml` is mirrored to it via a single-file `mkOutOfStoreSymlink` (the username is derived, so each user tracks their own copy in their own checkout), and in-UI changes write straight back into the flake repo as unstaged edits — commit them to persist. The rest of the state dir (`state.toml`, caches, the `.setup-complete` marker) is runtime noise and stays untracked.
 
 Noctalia's atomic writer is symlink-aware (it canonicalises the link and renames onto the real target), so the single-file `settings.toml` symlink survives every save.
@@ -234,4 +235,4 @@ Noctalia's atomic writer is symlink-aware (it canonicalises the link and renames
 ## Notes
 
 - `system.stateVersion` and `home.stateVersion` track the initial install — do not bump them on existing machines.
-- The greeter remembers per-user sessions in `/var/cache/tuigreet` (created via tmpfiles). First login after switching to the session chooser: pick your session once, it's remembered after that.
+- tuigreet remembers each user's last session in `/var/cache/tuigreet` (created via tmpfiles): a user's first login asks for a session choice, and later logins preselect it.
