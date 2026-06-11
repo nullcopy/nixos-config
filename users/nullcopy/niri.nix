@@ -1,25 +1,34 @@
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
-  # noctalia-shell is a wrapped `qs` with QS_CONFIG_PATH baked in (see the
-  # upstream package: ln -s ${quickshell}/bin/qs $out/bin/noctalia-shell, then
-  # wrapped with --set-default QS_CONFIG_PATH "$out/share/noctalia-shell").
-  # Invoking the *same* wrapped binary for both the daemon and the IPC client
-  # is the upstream-blessed pattern — it guarantees server and client resolve
-  # to the same instance and use the same qs build (no pkgs.quickshell vs
-  # noctalia-qs drift). See https://docs.noctalia.dev/v4/getting-started/nixos/
-  noctaliaShell = "${config.programs.noctalia-shell.package}/bin/noctalia-shell";
+  # noctalia v5 is a single compiled binary. The same executable is both the
+  # shell daemon and the IPC client: `noctalia` (no args) runs the shell, while
+  # `noctalia msg <command>` talks to the running instance over its unix socket.
+  # (v4's `noctalia-shell ipc call <ns> <fn>` is gone — commands are now flat
+  # verbs like `panel-toggle`, `volume-up`, `media toggle`. Discover them with
+  # `noctalia msg --help`.) See https://docs.noctalia.dev/v5/getting-started/nixos/
+  noctalia = "${config.programs.noctalia.package}/bin/noctalia";
+
+  # Render a niri `spawn` of `noctalia msg <command>`. `cmd` is a space-separated
+  # command string; each word becomes its own quoted token because niri's `spawn`
+  # takes argv as separate strings (the msg CLI re-joins them before dispatching).
+  # No noctalia command argument contains spaces, so splitting on " " is safe.
+  msg =
+    cmd:
+    ''spawn "${noctalia}" "msg" ''
+    + lib.concatMapStringsSep " " (a: ''"${a}"'') (lib.splitString " " cmd);
 
   # Helper: noctalia bind with a friendly hotkey-overlay title.
-  nocta =
-    title: target: fn:
-    ''hotkey-overlay-title="${title}" { spawn "${noctaliaShell}" "ipc" "call" "${target}" "${fn}"; }'';
+  nocta = title: cmd: ''hotkey-overlay-title="${title}" { ${msg cmd}; }'';
 
   # Helper: noctalia bind hidden from the overlay (used for XF86 keys),
   # also passable through the lock screen.
-  noctaSilent =
-    target: fn:
-    ''allow-when-locked=true hotkey-overlay-title=null { spawn "${noctaliaShell}" "ipc" "call" "${target}" "${fn}"; }'';
+  noctaSilent = cmd: "allow-when-locked=true hotkey-overlay-title=null { ${msg cmd}; }";
 in
 
 {
@@ -27,7 +36,7 @@ in
   # Niri's bundled default config references fuzzel/swaylock — apps we don't
   # ship. This file replaces the launcher/lock/etc. bindings with calls into
   # Noctalia's IPC. Discover more commands at:
-  # https://docs.noctalia.dev/v4/getting-started/keybinds/
+  # https://docs.noctalia.dev/v5/getting-started/keybinds/
   xdg.configFile."niri/config.kdl".force = true;
   xdg.configFile."niri/config.kdl".text = ''
     input {
@@ -44,7 +53,7 @@ in
     }
 
     // Launch Noctalia with niri (replaces the deprecated systemd unit).
-    spawn-at-startup "${noctaliaShell}"
+    spawn-at-startup "${noctalia}"
 
     binds {
         // ----- Niri ----------------------------------------------------------
@@ -56,30 +65,30 @@ in
         Mod+B           hotkey-overlay-title="Browser (brave)"      { spawn "brave"; }
 
         // ----- Noctalia panels ----------------------------------------------
-        Mod+Space   ${nocta "Launcher" "launcher" "toggle"}
-        Mod+Shift+V ${nocta "Clipboard history" "launcher" "clipboard"}
-        Mod+Period  ${nocta "Emoji picker" "launcher" "emoji"}
-        Mod+Tab     ${nocta "Window switcher" "launcher" "windows"}
-        Mod+Alt+L   ${nocta "Lock screen" "lockScreen" "lock"}
-        Mod+Escape  ${nocta "Session menu" "sessionMenu" "toggle"}
-        Mod+N       ${nocta "Notification history" "notifications" "toggleHistory"}
-        Mod+Shift+N ${nocta "Toggle DND" "notifications" "toggleDND"}
-        Mod+Comma   ${nocta "Settings" "settings" "toggle"}
-        Mod+Shift+C ${nocta "Control center" "controlCenter" "toggle"}
-        Mod+Shift+W ${nocta "Wallpaper picker" "wallpaper" "toggle"}
-        Mod+Shift+B ${nocta "Toggle bar" "bar" "toggle"}
-        Mod+Shift+D ${nocta "Toggle dark mode" "darkMode" "toggle"}
+        Mod+Space   ${nocta "Launcher" "panel-toggle launcher"}
+        Mod+Shift+V ${nocta "Clipboard history" "panel-toggle clipboard"}
+        Mod+Period  ${nocta "Emoji picker" "panel-toggle launcher /emo"}
+        Mod+Tab     ${nocta "Window switcher" "window-switcher"}
+        Mod+Alt+L   ${nocta "Lock screen" "session lock"}
+        Mod+Escape  ${nocta "Session menu" "panel-toggle session"}
+        Mod+N       ${nocta "Notification history" "panel-toggle control-center notifications"}
+        Mod+Shift+N ${nocta "Toggle DND" "notification-dnd-toggle"}
+        Mod+Comma   ${nocta "Settings" "settings-toggle"}
+        Mod+Shift+C ${nocta "Control center" "panel-toggle control-center"}
+        Mod+Shift+W ${nocta "Wallpaper picker" "panel-toggle wallpaper"}
+        Mod+Shift+B ${nocta "Toggle bar" "bar-toggle"}
+        Mod+Shift+D ${nocta "Toggle dark mode" "theme-mode-toggle"}
 
         // ----- Media / volume / brightness (route through Noctalia OSD) -----
-        XF86AudioRaiseVolume  ${noctaSilent "volume" "increase"}
-        XF86AudioLowerVolume  ${noctaSilent "volume" "decrease"}
-        XF86AudioMute         ${noctaSilent "volume" "muteOutput"}
-        XF86AudioMicMute      ${noctaSilent "volume" "muteInput"}
-        XF86MonBrightnessUp   ${noctaSilent "brightness" "increase"}
-        XF86MonBrightnessDown ${noctaSilent "brightness" "decrease"}
-        XF86AudioPlay         ${noctaSilent "media" "playPause"}
-        XF86AudioNext         ${noctaSilent "media" "next"}
-        XF86AudioPrev         ${noctaSilent "media" "previous"}
+        XF86AudioRaiseVolume  ${noctaSilent "volume-up"}
+        XF86AudioLowerVolume  ${noctaSilent "volume-down"}
+        XF86AudioMute         ${noctaSilent "volume-mute"}
+        XF86AudioMicMute      ${noctaSilent "mic-mute"}
+        XF86MonBrightnessUp   ${noctaSilent "brightness-up"}
+        XF86MonBrightnessDown ${noctaSilent "brightness-down"}
+        XF86AudioPlay         ${noctaSilent "media toggle"}
+        XF86AudioNext         ${noctaSilent "media next"}
+        XF86AudioPrev         ${noctaSilent "media previous"}
 
         // ----- Screenshots (grim/slurp/satty are in common/desktop.nix) -----
         Print           hotkey-overlay-title="Screenshot region"  { spawn "sh" "-c" "grim -g \"$(slurp)\" - | satty --filename -"; }
@@ -136,7 +145,7 @@ in
 
     switch-events {
         // Lock screen on laptop lid close
-        lid-close { spawn "${noctaliaShell}" "ipc" "call" "lockScreen" "lock"; }
+        lid-close { ${msg "session lock"}; }
     }
   '';
 }

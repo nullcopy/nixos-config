@@ -31,7 +31,7 @@ users/
     niri.nix           # niri keybindings wired to Noctalia IPC
     opencode.nix       # opencode pointed at the local ollama service
     tailscale.nix      # per-user `tailscale up` service
-    noctalia/          # tracked noctalia-shell config (see "Noctalia")
+    noctalia-settings.toml # tracked noctalia UI settings (see "Noctalia")
 ```
 
 Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
@@ -133,7 +133,14 @@ To add another shell, drop a file like `./devShells/embedded-arm.nix` (a functio
 
 ## Noctalia config
 
-`users/nullcopy/noctalia/` is the tracked copy of `~/.config/noctalia/`. On first activation it is seeded into `$HOME` as writable files so the shell's UI can save changes. On every rebuild the activation script diffs the live dir against the flake copy and prints an `M` / `-` / `?` drift report with the exact `cp` / `rm` commands to reconcile. To ignore a runtime state file, add its basename to `noctaliaDriftExcludes` at the top of `users/nullcopy/configuration.nix`.
+This config tracks **Noctalia v5** (a compiled Wayland shell; v4 was a QML/quickshell wrapper). `users/nullcopy/configuration.nix` enables it with `programs.noctalia` and `niri.nix` drives every panel/OSD through the v5 `noctalia msg <command>` IPC (run `noctalia msg --help` for the full list).
+
+v5 splits its writable files across two XDG dirs, and the settings UI writes to the **state** dir, not the config dir:
+
+- `~/.config/noctalia/config.toml` — the base config layer. The settings UI never writes it; it's left at noctalia's built-in defaults. Pin a base value declaratively with `programs.noctalia.settings.<…>` in `configuration.nix` and the module renders a read-only `config.toml`. (Custom palettes saved in the UI also land in `~/.config/noctalia/palettes/`, writeable but untracked.)
+- `~/.local/state/noctalia/settings.toml` — **everything you change in the settings UI**, layered on top of `config.toml`. This is the only writeable file we track: `users/nullcopy/noctalia-settings.toml` is mirrored to it via a single-file `mkOutOfStoreSymlink`, so in-UI changes write straight back into the flake repo as unstaged edits — commit them to persist. The rest of the state dir (`state.toml`, caches, the `.setup-complete` marker) is runtime noise and stays untracked.
+
+Noctalia's atomic writer is symlink-aware (it canonicalises the link and renames onto the real target), so the single-file `settings.toml` symlink survives every save.
 
 ## Notes
 

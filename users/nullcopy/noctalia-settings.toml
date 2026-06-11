@@ -1,0 +1,10 @@
+# Noctalia v5 UI settings overrides (settings.toml).
+#
+# This file is symlinked to ~/.local/state/noctalia/settings.toml. Noctalia
+# rewrites it whenever you change something in its settings UI, layering these
+# values on top of ~/.config/noctalia/config.toml. Because it lives in the flake
+# repo, those UI changes show up here as unstaged diffs — commit them to persist.
+#
+# Safe to hand-edit, but the shell owns the file and will rewrite it (dropping
+# comments) on the next UI change. Empty = no overrides; everything falls back to
+# config.toml / built-in defaults.
