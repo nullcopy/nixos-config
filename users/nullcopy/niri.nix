@@ -90,7 +90,7 @@ in
         XF86AudioNext         ${noctaSilent "media next"}
         XF86AudioPrev         ${noctaSilent "media previous"}
 
-        // ----- Screenshots (grim/slurp/satty are in common/desktop.nix) -----
+        // ----- Screenshots (grim/slurp/satty are in ./desktop.nix) -----
         Print           hotkey-overlay-title="Screenshot region"  { spawn "sh" "-c" "grim -g \"$(slurp)\" - | satty --filename -"; }
         Mod+Print       hotkey-overlay-title="Screenshot window"  { screenshot-window; }
         Ctrl+Print      hotkey-overlay-title="Screenshot screen"  { screenshot-screen; }

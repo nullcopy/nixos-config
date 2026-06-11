@@ -1,0 +1,99 @@
+{
+  config,
+  pkgs,
+  inputs,
+  ...
+}:
+
+## nullcopy's portable home: shell, prompt, editor, CLI tooling and identity.
+## Nothing graphical lives here — this module must work unchanged on a
+## headless host. The desktop (niri + Noctalia + GUI apps) is layered on by
+## ./desktop.nix, which mkHost includes only on graphical hosts.
+{
+  imports = [
+    inputs.nixvim.homeModules.nixvim
+    ./tailscale.nix
+    ./aliases.nix
+    ./neovim.nix
+    ./opencode.nix
+  ];
+
+  ## ----- packages ------------------------------------------------------------
+  home.packages = with pkgs; [
+    fzf
+    tldr
+    ripgrep
+  ];
+
+  ## ----- programs ------------------------------------------------------------
+  programs.zsh = {
+    enable = true;
+    autosuggestion.enable = true;
+    initContent = ''
+      export PATH="$HOME/.cargo/bin:$PATH"
+    '';
+    history = {
+      path = "${config.home.homeDirectory}/.zsh_history";
+      size = 100000;
+      save = 100000;
+      share = true;
+      extended = true;
+      ignoreDups = true;
+      ignoreSpace = true;
+    };
+    historySubstringSearch = {
+      enable = true;
+      # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
+      searchUpKey = [
+        "^[[A"
+        "^[OA"
+      ]; # Up arrow
+      searchDownKey = [
+        "^[[B"
+        "^[OB"
+      ]; # Down arrow
+    };
+  };
+
+  programs.starship = {
+    enable = true;
+    presets = [ "gruvbox-rainbow" ];
+  };
+
+  # direnv: per-directory environment loader. When you `cd` into a directory
+  # containing a `.envrc`, direnv exports its env into your current shell;
+  # leave the directory and it unloads. nix-direnv adds the `use flake`
+  # builtin so `.envrc` can be a one-liner that loads a project's devShell
+  # (and caches the evaluation so repeat `cd`s are instant).
+  #
+  # Per-project setup:
+  #   1. Project has a `flake.nix` defining `devShells.<system>.default`.
+  #   2. Add a `.envrc` next to it containing:  use flake
+  #   3. First time only, run `direnv allow` — direnv won't auto-execute an
+  #      .envrc until you've explicitly trusted it.
+  # From then on, `cd` into the project loads the toolchain defined in
+  # flake.nix (cargo/rustfmt/clang/etc) into your shell automatically.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
+  programs.gpg.enable = true;
+
+  programs.git = {
+    enable = true;
+    settings = {
+      user = {
+        name = "John Boyd";
+        email = "john@coldnoise.net";
+      };
+      core.editor = "vim";
+      commit.gpgsign = true;
+      tag.gpgsign = true;
+    };
+  };
+
+  ## ----- state version -------------------------------------------------------
+  # Don't change this unless you know what you're doing
+  home.stateVersion = "25.11";
+}

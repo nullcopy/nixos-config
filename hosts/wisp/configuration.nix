@@ -10,7 +10,13 @@
     ./hardware-configuration.nix
     ./luks.nix
     ./ollama.nix
-    ../../common/desktop.nix
+    # Role modules this host opts into. A headless host would import none of
+    # these; the greeter (one per machine) is always chosen here
+    ../../modules/audio.nix
+    ../../modules/bluetooth.nix
+    ../../modules/networkmanager.nix
+    ../../modules/power.nix
+    ../../modules/greeters/tuigreet.nix
   ];
 
   ## ----- boot ----------------------------------------------------------------
@@ -21,23 +27,6 @@
 
   ## ----- hardware ------------------------------------------------------------
   hardware.graphics.enable = true;
-
-  ## ----- network -------------------------------------------------------------
-  networking.hostName = "wisp";
-
-  ## ----- users ---------------------------------------------------------------
-  programs.zsh.enable = true; # system-level so zsh is in /etc/shells
-
-  users.users.nullcopy = {
-    isNormalUser = true;
-    shell = pkgs.zsh;
-    extraGroups = [
-      "wheel"
-      "networkmanager"
-      "audio"
-      "video"
-    ];
-  };
 
   ## ----- state version -------------------------------------------------------
   # Don't change this unless you know what you're doing

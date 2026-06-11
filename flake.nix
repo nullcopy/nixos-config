@@ -27,16 +27,65 @@
 
   outputs =
     inputs@{
-      self,
       nixpkgs,
       home-manager,
-      noctalia,
       fenix,
       ...
     }:
     let
+      lib = nixpkgs.lib;
+
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+
+      # mkHost assembles a machine from three layers:
+      #
+      #   modules/core.nix    baseline every machine gets (headless-safe)
+      #   hosts/<hostname>/   hardware + host services; the host also picks its
+      #                       role modules (audio, networkmanager, greeter, ...)
+      #                       via imports in its configuration.nix
+      #   users/<user>/       per-user account (system.nix), home-manager config
+      #                       (home.nix), and — only on graphical hosts, only if
+      #                       the user defines one — their desktop (desktop.nix)
+      #
+      # `graphical = false` declares a headless host: same users, same CLI
+      # homes, but every users/<user>/desktop.nix is skipped so no compositor
+      # or GUI package enters the closure. (The greeter is host config — a
+      # headless host simply doesn't import one from modules/greeters/.)
+      mkHost =
+        {
+          hostname,
+          system ? "x86_64-linux",
+          users ? [ ],
+          graphical ? true,
+          extraModules ? [ ],
+        }:
+        nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./modules/core.nix
+            ./hosts/${hostname}/configuration.nix
+            { networking.hostName = hostname; }
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.extraSpecialArgs = { inherit inputs; };
+            }
+          ]
+          ++ lib.concatMap (
+            user:
+            [
+              ./users/${user}/system.nix
+              { home-manager.users.${user} = import ./users/${user}/home.nix; }
+            ]
+            ++ lib.optional (graphical && builtins.pathExists ./users/${user}/desktop.nix) (
+              ./users/${user}/desktop.nix
+            )
+          ) users
+          ++ extraModules;
+        };
 
       # Each shell lives in its own file under ./devShells; add a new one by
       # dropping a file there and listing it below. There is no `default` —
@@ -76,22 +125,18 @@
 
       nixosConfigurations = {
 
-        ## ----- wisp laptop config ----------------------------------------------
-        wisp = nixpkgs.lib.nixosSystem {
-          inherit system;
-          specialArgs = { inherit inputs; };
-          modules = [
-            ./common/configuration.nix
-            ./hosts/wisp/configuration.nix
-            home-manager.nixosModules.home-manager
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.extraSpecialArgs = { inherit inputs; };
-              home-manager.users.nullcopy = import ./users/nullcopy/configuration.nix;
-            }
-          ];
+        ## ----- wisp laptop ------------------------------------------------------
+        wisp = mkHost {
+          hostname = "wisp";
+          users = [ "nullcopy" ];
         };
+
+        ## A headless host would look like:
+        ##   somehost = mkHost {
+        ##     hostname = "somehost";
+        ##     users = [ "nullcopy" ];
+        ##     graphical = false;
+        ##   };
       };
     };
 }

@@ -5,29 +5,25 @@
   ...
 }:
 
+## Home-manager half of nullcopy's desktop, wired in by ./desktop.nix: shell
+## UI, terminal, browser, GUI apps, and the niri keybindings (./niri.nix).
+## Per-user paths are derived from config.home.username, so a copied desktop
+## config needs no edits in this file.
 {
   imports = [
     inputs.noctalia.homeModules.default
-    inputs.nixvim.homeModules.nixvim
-    ./tailscale.nix
-    ./aliases.nix
-    ./neovim.nix
     ./niri.nix
-    ./opencode.nix
   ];
 
   ## ----- packages ------------------------------------------------------------
   home.packages = with pkgs; [
     brave
-    nerd-fonts.jetbrains-mono
-    fzf
     grayjay
     nautilus
-    transmission_4-gtk
+    nerd-fonts.jetbrains-mono # provides the alacritty font below
     signal-desktop
-    tldr
     tor-browser
-    ripgrep
+    transmission_4-gtk
   ];
 
   ## ----- session variables ---------------------------------------------------
@@ -63,78 +59,11 @@
     #   settings.shell.font_family = "JetBrainsMono Nerd Font";
   };
 
-  programs.zsh = {
-    enable = true;
-    autosuggestion.enable = true;
-    initContent = ''
-      export PATH="$HOME/.cargo/bin:$PATH"
-    '';
-    history = {
-      path = "${config.home.homeDirectory}/.zsh_history";
-      size = 100000;
-      save = 100000;
-      share = true;
-      extended = true;
-      ignoreDups = true;
-      ignoreSpace = true;
-    };
-    historySubstringSearch = {
-      enable = true;
-      # Bind both cursor-mode (^[[A) and application-mode (^[OA) escapes:v
-      searchUpKey = [
-        "^[[A"
-        "^[OA"
-      ]; # Up arrow
-      searchDownKey = [
-        "^[[B"
-        "^[OB"
-      ]; # Down arrow
-    };
-  };
-
-  programs.starship = {
-    enable = true;
-    presets = [ "gruvbox-rainbow" ];
-  };
-
   programs.alacritty = {
     enable = true;
     settings = {
       font.normal.family = "JetBrainsMono Nerd Font";
       window.decorations = "None";
-    };
-  };
-
-  # direnv: per-directory environment loader. When you `cd` into a directory
-  # containing a `.envrc`, direnv exports its env into your current shell;
-  # leave the directory and it unloads. nix-direnv adds the `use flake`
-  # builtin so `.envrc` can be a one-liner that loads a project's devShell
-  # (and caches the evaluation so repeat `cd`s are instant).
-  #
-  # Per-project setup:
-  #   1. Project has a `flake.nix` defining `devShells.<system>.default`.
-  #   2. Add a `.envrc` next to it containing:  use flake
-  #   3. First time only, run `direnv allow` — direnv won't auto-execute an
-  #      .envrc until you've explicitly trusted it.
-  # From then on, `cd` into the project loads the toolchain defined in
-  # flake.nix (cargo/rustfmt/clang/etc) into your shell automatically.
-  programs.direnv = {
-    enable = true;
-    nix-direnv.enable = true;
-  };
-
-  programs.gpg.enable = true;
-
-  programs.git = {
-    enable = true;
-    settings = {
-      user = {
-        name = "John Boyd";
-        email = "john@coldnoise.net";
-      };
-      core.editor = "vim";
-      commit.gpgsign = true;
-      tag.gpgsign = true;
     };
   };
 
@@ -146,14 +75,14 @@
   # symlink-aware — it canonicalises the link and renames onto the real target —
   # so the single-file out-of-store symlink survives every save.
   #
+  # The target lives in the user's own checkout of this repo (~/.nixos-config),
+  # at users/<username>/noctalia-settings.toml. A user copying this desktop
+  # config creates that file alongside it (empty is fine).
+  #
   # config.toml itself is read-only (built-in defaults, or declarative via
   # programs.noctalia.settings above), so it isn't symlinked. Note: custom
   # palettes saved in the UI land in ~/.config/noctalia/palettes/ and are NOT
   # tracked here.
   home.file.".local/state/noctalia/settings.toml".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia-settings.toml";
-
-  ## ----- state version -------------------------------------------------------
-  # Don't change this unless you know what you're doing
-  home.stateVersion = "25.11";
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/${config.home.username}/noctalia-settings.toml";
 }

@@ -1,40 +1,146 @@
 # nixos-config
 
-Personal NixOS flake. Host configs + home-manager, keyed by machine name.
+Personal NixOS flake: multiple hosts, multiple users, with desktops chosen
+per user and headless hosts as a first-class case.
 
 ## Layout
 
 ```
-flake.nix              # inputs + nixosConfigurations + devShells
-common/
-  configuration.nix    # base system (nix, locale, net, audio, base pkgs)
-  desktop.nix          # niri + greetd + xdg portals
-devShells/
-  rust.nix             # fenix toolchain + bindgen deps (see "devShells")
-  python.nix
-  go.nix
-  c.nix
-  lua.nix
-  nix.nix
-  bash.nix
+flake.nix                # inputs + mkHost helper + one mkHost call per machine
+modules/                 # system-side building blocks (NixOS modules)
+  core.nix               # baseline every host gets — strictly headless-safe
+  audio.nix              # pipewire + rtkit
+  bluetooth.nix
+  networkmanager.nix
+  power.nix              # power-profiles-daemon + upower (laptops)
+  greeters/
+    tuigreet.nix         # greetd + tuigreet session chooser (one greeter per host)
 hosts/
-  wisp/                # per-machine module
-    configuration.nix  # imports hw + luks + ollama + desktop + user group
+  wisp/                  # per-machine module
+    configuration.nix    # hardware + host services + role-module imports
     hardware-configuration.nix
-    luks.nix           # stage-1 systemd + FIDO2 LUKS unlock
-    ollama.nix         # ROCm ollama + GTT tuning for Strix Halo iGPU
+    luks.nix             # stage-1 systemd + FIDO2 LUKS unlock
+    ollama.nix           # ROCm ollama + GTT tuning for Strix Halo iGPU
 users/
   nullcopy/
-    configuration.nix  # home-manager module (imports the files below)
-    aliases.nix        # zsh + oh-my-zsh-style git aliases
-    neovim.nix         # nixvim config (AstroNvim-flavoured UX)
-    niri.nix           # niri keybindings wired to Noctalia IPC
-    opencode.nix       # opencode pointed at the local ollama service
-    tailscale.nix      # per-user `tailscale up` service
+    system.nix           # the account (users.users.nullcopy), host-independent
+    home.nix             # portable CLI home: shell, editor, git identity —
+                         #   must work unchanged on a headless host
+    desktop.nix          # this user's desktop, system half: niri, portals,
+                         #   screenshot tools; skipped on headless hosts
+    desktop-home.nix     # desktop, home half: noctalia, alacritty, brave,
+                         #   mimeapps, GUI apps (wired in by desktop.nix)
+    niri.nix             # niri keybindings wired to Noctalia IPC
+    aliases.nix          # zsh + oh-my-zsh-style git aliases
+    neovim.nix           # nixvim config (AstroNvim-flavoured UX)
+    opencode.nix         # opencode pointed at the local ollama service
+    tailscale.nix        # per-user `tailscale up` service
     noctalia-settings.toml # tracked noctalia UI settings (see "Noctalia")
+devShells/               # one shell per language (see "devShells")
 ```
 
 Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
+
+## How a machine is assembled
+
+`mkHost` in `flake.nix` wires three layers together:
+
+| Layer | Owns | Files |
+|---|---|---|
+| core | what *every* machine gets | `modules/core.nix` |
+| host | hardware, host services, role modules (audio, NM, …) and **the greeter** | `hosts/<name>/` |
+| user | account, CLI home, and (on graphical hosts) their desktop | `users/<name>/` |
+
+```nix
+wisp = mkHost {
+  hostname = "wisp";
+  users = [ "nullcopy" ];
+};
+```
+
+For each listed user, mkHost imports `users/<name>/system.nix`, wires
+`users/<name>/home.nix` into home-manager, and — only when `graphical = true`
+(the default) and the file exists — imports `users/<name>/desktop.nix`.
+
+**Desktops are a user choice; greeters are a host choice.** A desktop is
+defined entirely inside the user's own directory: `desktop.nix` (system half —
+compositor, portals, companion tools) and `desktop-home.nix` + `niri.nix`
+(home half — shell UI, terminal, keybinds). There is no shared desktop layer:
+a new user who wants the same desktop copies those files and edits the
+username in `desktop.nix`. Two users running copies of the same desktop on
+one host coexist fine — identical system options simply merge.
+The greeter, however, owns the seat — a machine can only run one — so graphical
+hosts import exactly one module from `modules/greeters/`. tuigreet is
+configured as a desktop-agnostic session chooser: every compositor enabled by
+any user's desktop installs a session file under
+`/run/current-system/sw/share/wayland-sessions`, tuigreet lists them all and
+remembers each user's last choice. Adding a new WM never touches the greeter.
+
+### Adding a new host
+
+1. `mkdir hosts/<name>` with a `configuration.nix` (use `hosts/wisp/` as a
+   template) importing `./hardware-configuration.nix` plus whichever role
+   modules the machine needs (`modules/audio.nix`, `modules/networkmanager.nix`,
+   `modules/greeters/tuigreet.nix`, …). Set `system.stateVersion` to the
+   current release and never change it.
+2. Add one block to `flake.nix`:
+   ```nix
+   <name> = mkHost {
+     hostname = "<name>";
+     users = [ "alice" "bob" ];
+   };
+   ```
+
+For a **headless server**, import no greeter / audio / etc. in the host config
+and set `graphical = false` in the mkHost call — users keep their full CLI
+homes but every `desktop.nix` is skipped, so nothing graphical enters the
+closure.
+
+### Adding a new user
+
+1. `mkdir users/<name>` with two files (plus an optional desktop):
+   - `system.nix` — the account:
+     ```nix
+     { config, lib, pkgs, ... }:
+     {
+       users.users.<name> = {
+         isNormalUser = true;
+         extraGroups = [ "audio" "video" ];
+       };
+     }
+     ```
+   - `home.nix` — a home-manager module. Start small, keep it headless-safe:
+     ```nix
+     { config, lib, pkgs, inputs, ... }:
+     {
+       home.packages = with pkgs; [ ];
+       home.stateVersion = "25.11";
+     }
+     ```
+   - `desktop.nix` (optional) — the user's desktop, only ever evaluated on
+     graphical hosts. To run the same desktop as an existing user, copy their
+     `desktop.nix`, `desktop-home.nix` and `niri.nix`, then change the
+     username in `desktop.nix`'s `home-manager.users.<name>` line. (Also copy
+     or create `noctalia-settings.toml` — empty is fine.) For a different
+     desktop, write your own: anything system-side (compositor, portals) in
+     `desktop.nix`, anything home-manager-side in `desktop-home.nix`.
+2. Add the user to the `users` list of each host they belong on.
+3. After the first rebuild, an admin sets their password with `passwd <name>`.
+
+The host's greeter picks up new desktop sessions automatically. If a desktop
+needs a *different* greeter (e.g. SDDM), add a module under
+`modules/greeters/` and swap the host's import — it's one greeter per machine,
+shared by all of its users.
+
+## Where the repo lives
+
+Rebuilds run as root (`sudo nixos-rebuild …`), so the checkout does **not**
+need to be world-readable — the admin's home works fine, and the flake is
+snapshotted into the world-readable nix store at build time regardless (which
+is also why secrets like the tailscale env file stay outside the repo). The
+one runtime path coupling is per-user: the Noctalia settings symlink points at
+`~/.nixos-config/users/<username>/noctalia-settings.toml` in *each user's own
+home*, so only users who want their UI settings tracked keep a checkout.
 
 ## First-time setup on a new machine
 
@@ -48,7 +154,7 @@ Machine configs are organized by host name, so pick a `<name>` (e.g. `wisp`) and
 DISK=/dev/nvme0n1               # target disk — double-check with lsblk
 FLAKE_REPO="https://github.com/nullcopy/nixos-config"
 HOSTNAME="myNewNixosComputer"   # must match nixosConfigurations.<name> in flake.nix
-ADMINUSER="myAdminUser"         # wheel-group user defined in your host config
+ADMINUSER="myAdminUser"         # wheel-group user defined in users/<name>/system.nix
 ```
 
 Then, from the NixOS live environment, download it, edit the variables, and run it as root:
@@ -62,9 +168,8 @@ bash nixos-install.sh
 The script will:
 1. Partition and format the disk (GPT, EFI + LUKS2-encrypted btrfs root with subvolumes).
 2. Clone this flake to `/mnt/etc/nixos` and generate `hardware-configuration.nix`.
-3. Drop you into an interactive shell so you can make any necessary edits — at minimum:
-   - Create `hosts/<name>/configuration.nix` (see [hosts/wisp/configuration.nix](hosts/wisp/configuration.nix) as a template) and make sure it imports `./hardware-configuration.nix`.
-   - Add an entry for `<name>` under `nixosConfigurations` in `flake.nix` (mirroring the `wisp` block).
+3. Drop you into an interactive shell so you can make any necessary edits — at minimum,
+   follow "Adding a new host" above (and "Adding a new user" if the machine gets new users).
 4. Run `nixos-install`, prompt for `ADMINUSER`'s password, then cleanly unmount everything.
 
 If you defined additional users, `ADMINUSER` will need to log in first and assign their passwords with `passwd <username>`.
@@ -95,22 +200,6 @@ nix flake update            # bump all inputs
 nix flake lock --update-input nixpkgs   # bump one input
 ```
 
-## Adding a new user
-
-1. `mkdir users/<name>` and create `configuration.nix` — this is a home-manager module. Start small:
-   ```nix
-   { config, lib, pkgs, inputs, ... }:
-   {
-     home.packages = with pkgs; [ ];
-     home.stateVersion = "25.11";
-   }
-   ```
-2. In the host module, declare the system user under `users.users.<name>`.
-3. In `flake.nix`, add the home-manager wiring for the host:
-   ```nix
-   home-manager.users.<name> = import ./users/<name>/configuration.nix;
-   ```
-
 ## devShells
 
 One shell per language, covering the tooling used by the nixvim LSP config — a fallback for ad-hoc work in projects that don't ship their own flake. Real projects should still define their own `devShells.default` and load it via direnv (`echo 'use flake' > .envrc && direnv allow`).
@@ -133,15 +222,16 @@ To add another shell, drop a file like `./devShells/embedded-arm.nix` (a functio
 
 ## Noctalia config
 
-This config tracks **Noctalia v5** (a compiled Wayland shell; v4 was a QML/quickshell wrapper). `users/nullcopy/configuration.nix` enables it with `programs.noctalia` and `niri.nix` drives every panel/OSD through the v5 `noctalia msg <command>` IPC (run `noctalia msg --help` for the full list).
+This config tracks **Noctalia v5** (a compiled Wayland shell; v4 was a QML/quickshell wrapper). The user's desktop config (`users/<name>/desktop-home.nix`) enables it with `programs.noctalia`, and `users/<name>/niri.nix` drives every panel/OSD through the v5 `noctalia msg <command>` IPC (run `noctalia msg --help` for the full list).
 
 v5 splits its writable files across two XDG dirs, and the settings UI writes to the **state** dir, not the config dir:
 
-- `~/.config/noctalia/config.toml` — the base config layer. The settings UI never writes it; it's left at noctalia's built-in defaults. Pin a base value declaratively with `programs.noctalia.settings.<…>` in `configuration.nix` and the module renders a read-only `config.toml`. (Custom palettes saved in the UI also land in `~/.config/noctalia/palettes/`, writeable but untracked.)
-- `~/.local/state/noctalia/settings.toml` — **everything you change in the settings UI**, layered on top of `config.toml`. This is the only writeable file we track: `users/nullcopy/noctalia-settings.toml` is mirrored to it via a single-file `mkOutOfStoreSymlink`, so in-UI changes write straight back into the flake repo as unstaged edits — commit them to persist. The rest of the state dir (`state.toml`, caches, the `.setup-complete` marker) is runtime noise and stays untracked.
+- `~/.config/noctalia/config.toml` — the base config layer. The settings UI never writes it; it's left at noctalia's built-in defaults. Pin a base value declaratively with `programs.noctalia.settings.<…>` in the bundle's `home.nix` and the module renders a read-only `config.toml`. (Custom palettes saved in the UI also land in `~/.config/noctalia/palettes/`, writeable but untracked.)
+- `~/.local/state/noctalia/settings.toml` — **everything you change in the settings UI**, layered on top of `config.toml`. This is the only writeable file we track: `users/<username>/noctalia-settings.toml` is mirrored to it via a single-file `mkOutOfStoreSymlink` (the username is derived, so each user tracks their own copy in their own checkout), and in-UI changes write straight back into the flake repo as unstaged edits — commit them to persist. The rest of the state dir (`state.toml`, caches, the `.setup-complete` marker) is runtime noise and stays untracked.
 
 Noctalia's atomic writer is symlink-aware (it canonicalises the link and renames onto the real target), so the single-file `settings.toml` symlink survives every save.
 
 ## Notes
 
 - `system.stateVersion` and `home.stateVersion` track the initial install — do not bump them on existing machines.
+- The greeter remembers per-user sessions in `/var/cache/tuigreet` (created via tmpfiles). First login after switching to the session chooser: pick your session once, it's remembered after that.

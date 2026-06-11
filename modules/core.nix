@@ -5,6 +5,10 @@
   ...
 }:
 
+## Baseline applied to every host by mkHost. Keep this strictly universal —
+## a headless server gets everything in here. Role-specific config (audio,
+## NetworkManager, bluetooth, power, greeters, ...) lives in sibling modules
+## that hosts import explicitly from their configuration.nix.
 {
   ## ----- nix -----------------------------------------------------------------
   nix.settings.experimental-features = [
@@ -12,6 +16,9 @@
     "flakes"
   ];
 
+  # Central unfree whitelist. This must live at the system level — with
+  # home-manager.useGlobalPkgs every user's packages evaluate against this
+  # nixpkgs instance, so a user wanting an unfree package adds it here.
   # Grayjay ships under the Source First License, which nixpkgs marks unfree.
   nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "grayjay" ];
 
@@ -23,38 +30,19 @@
   };
 
   ## ----- locale --------------------------------------------------------------
-  time.timeZone = "America/Chicago";
-  i18n.defaultLocale = "en_US.UTF-8";
+  # mkDefault so a host in another timezone/locale can override plainly.
+  time.timeZone = lib.mkDefault "America/Chicago";
+  i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
 
   ## ----- networking ----------------------------------------------------------
-  networking.networkmanager.enable = true;
   networking.firewall.enable = true;
 
   ## ----- tailscale -----------------------------------------------------------
   # Daemon must run as root; per-user up/down is configured in home-manager.
   services.tailscale.enable = true;
 
-  ## ----- bluetooth -----------------------------------------------------------
-  hardware.bluetooth = {
-    enable = true;
-    powerOnBoot = false;
-  };
-
-  ## ----- power management ----------------------------------------------------
-  services.power-profiles-daemon.enable = true;
-  services.upower.enable = true;
-
-  ## ----- audio ---------------------------------------------------------------
-  services.pulseaudio.enable = false;
-  security.rtkit.enable = true;
-  services.pipewire = {
-    enable = true;
-    alsa.enable = true;
-    alsa.support32Bit = true;
-    pulse.enable = true;
-  };
-
   ## ----- gpg -----------------------------------------------------------------
+  # pinentry-curses works on console and SSH alike, so this is headless-safe.
   programs.gnupg.agent = {
     enable = true;
     pinentryPackage = pkgs.pinentry-curses;
