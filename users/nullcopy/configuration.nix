@@ -99,7 +99,10 @@
 
   programs.alacritty = {
     enable = true;
-    settings.font.normal.family = "JetBrainsMono Nerd Font";
+    settings = {
+      font.normal.family = "JetBrainsMono Nerd Font";
+      window.decorations = "None";
+    };
   };
 
   # direnv: per-directory environment loader. When you `cd` into a directory
