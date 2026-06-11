@@ -1,10 +1,58 @@
-# Noctalia v5 UI settings overrides (settings.toml).
-#
-# This file is symlinked to ~/.local/state/noctalia/settings.toml. Noctalia
-# rewrites it whenever you change something in its settings UI, layering these
-# values on top of ~/.config/noctalia/config.toml. Because it lives in the flake
-# repo, those UI changes show up here as unstaged diffs — commit them to persist.
-#
-# Safe to hand-edit, but the shell owns the file and will rewrite it (dropping
-# comments) on the next UI change. Empty = no overrides; everything falls back to
-# config.toml / built-in defaults.
+[bar.default]
+auto_hide = true
+layer = "overlay"
+reserve_space = false
+start = [ "group:g1" ]
+
+    [[bar.default.capsule_group]]
+    fill = "surface_variant"
+    id = "g1"
+    members = [ "cpu", "workspaces" ]
+    opacity = 1.0
+    padding = 6.0
+
+[lockscreen]
+blurred_desktop = true
+
+[lockscreen_widgets]
+enabled = true
+schema_version = 2
+widget_order = [ "lockscreen-login-box@HDMI-A-1" ]
+
+    [lockscreen_widgets.grid]
+    cell_size = 16
+    major_interval = 4
+    visible = true
+
+    [lockscreen_widgets.widget."lockscreen-login-box@HDMI-A-1"]
+    box_height = 0.0
+    box_width = 0.0
+    cx = 1720.0
+    cy = 1317.0
+    output = "HDMI-A-1"
+    rotation = 0.0
+    type = "login_box"
+
+        [lockscreen_widgets.widget."lockscreen-login-box@HDMI-A-1".settings]
+        background_color = "surface_variant"
+        background_opacity = 0.88
+        background_radius = 12.0
+        input_opacity = 1.0
+        input_radius = 6.0
+        show_login_button = true
+
+[nightlight]
+enabled = true
+
+[shell]
+offline_mode = true
+
+    [shell.panel]
+    control_center_placement = "centered"
+    transparency_mode = "soft"
+
+[theme]
+builtin = "Catppuccin"
+
+[weather]
+enabled = false
