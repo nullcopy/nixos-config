@@ -71,5 +71,9 @@ offline_mode = true
 [theme]
 builtin = "Catppuccin"
 
+    [theme.templates]
+    enable_builtin_templates = false
+    enable_community_templates = false
+
 [weather]
 enabled = false
