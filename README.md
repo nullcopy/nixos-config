@@ -31,7 +31,7 @@ users/
     niri.nix           # niri keybindings wired to Noctalia IPC
     opencode.nix       # opencode pointed at the local ollama service
     tailscale.nix      # per-user `tailscale up` service
-    noctalia/          # tracked noctalia-shell config (see "Noctalia")
+    noctalia/          # tracked noctalia config (see "Noctalia")
 ```
 
 Inputs: `nixpkgs` (unstable), `home-manager`, `noctalia`, `nixvim`, `fenix`.
@@ -133,7 +133,9 @@ To add another shell, drop a file like `./devShells/embedded-arm.nix` (a functio
 
 ## Noctalia config
 
-`users/nullcopy/noctalia/` is the tracked copy of `~/.config/noctalia/`. On first activation it is seeded into `$HOME` as writable files so the shell's UI can save changes. On every rebuild the activation script diffs the live dir against the flake copy and prints an `M` / `-` / `?` drift report with the exact `cp` / `rm` commands to reconcile. To ignore a runtime state file, add its basename to `noctaliaDriftExcludes` at the top of `users/nullcopy/configuration.nix`.
+This config tracks **Noctalia v5** (a compiled Wayland shell; v4 was a QML/quickshell wrapper). `users/nullcopy/configuration.nix` enables it with `programs.noctalia` and `niri.nix` drives every panel/OSD through the v5 `noctalia msg <command>` IPC (run `noctalia msg --help` for the full list).
+
+`users/nullcopy/noctalia/` is symlinked to `~/.config/noctalia/` via `mkOutOfStoreSymlink` (the whole directory, because Noctalia writes atomically with rename). Noctalia stores its state here as `config.toml` (seeded from upstream's documented defaults) plus a `palettes/` dir for custom themes. Because it's an out-of-store symlink, changes made in the shell's UI write straight back into the flake repo and show up as unstaged edits — commit them to persist.
 
 ## Notes
 

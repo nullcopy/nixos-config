@@ -49,12 +49,13 @@
   };
 
   ## ----- programs ------------------------------------------------------------
-  programs.noctalia-shell = {
+  programs.noctalia = {
     enable = true;
-    # Noctalia upstream deprecated systemd startup — it causes delayed start
-    # and unreliable IPC. The shell is spawned from niri's spawn-at-startup
-    # instead. See https://docs.noctalia.dev/v4/getting-started/nixos/#running-the-shell
-    # settings/colors/plugins are managed via mkOutOfStoreSymlink below so UI
+    # systemd startup is opt-in (programs.noctalia.systemd.enable) and left off
+    # here: it causes delayed start and unreliable IPC. The shell is spawned
+    # from niri's spawn-at-startup instead.
+    # See https://docs.noctalia.dev/v5/getting-started/nixos/#running-the-shell
+    # config.toml/palettes are managed via mkOutOfStoreSymlink below so UI
     # changes persist back into the flake repo as unstaged edits.
   };
 
@@ -133,7 +134,10 @@
   ## ----- xdg config files ---------------------------------------------------
   # Symlink the entire ~/.config/noctalia directory (not individual files inside
   # it) because noctalia uses atomic write-and-rename when saving, which would
-  # otherwise replace per-file symlinks with regular files on every save.
+  # otherwise replace per-file symlinks with regular files on every save. v5
+  # stores its state here as config.toml (+ a palettes/ dir for custom themes);
+  # noctalia regenerates config.toml on first run, and edits made in the UI land
+  # back in the flake repo as unstaged changes.
   xdg.configFile."noctalia".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia";
 
