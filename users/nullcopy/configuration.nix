@@ -55,8 +55,12 @@
     # here: it causes delayed start and unreliable IPC. The shell is spawned
     # from niri's spawn-at-startup instead.
     # See https://docs.noctalia.dev/v5/getting-started/nixos/#running-the-shell
-    # config.toml/palettes are managed via mkOutOfStoreSymlink below so UI
-    # changes persist back into the flake repo as unstaged edits.
+    #
+    # Base config (config.toml) is left at noctalia's built-in defaults — the
+    # settings UI never writes it, only ~/.local/state/noctalia/settings.toml
+    # (tracked via the symlink below). To pin a base setting declaratively, set
+    # it here and this module renders a read-only config.toml, e.g.:
+    #   settings.shell.font_family = "JetBrainsMono Nerd Font";
   };
 
   programs.zsh = {
@@ -131,15 +135,20 @@
     };
   };
 
-  ## ----- xdg config files ---------------------------------------------------
-  # Symlink the entire ~/.config/noctalia directory (not individual files inside
-  # it) because noctalia uses atomic write-and-rename when saving, which would
-  # otherwise replace per-file symlinks with regular files on every save. v5
-  # stores its state here as config.toml (+ a palettes/ dir for custom themes);
-  # noctalia regenerates config.toml on first run, and edits made in the UI land
-  # back in the flake repo as unstaged changes.
-  xdg.configFile."noctalia".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia";
+  ## ----- noctalia UI settings -----------------------------------------------
+  # v5 writes everything changed in the settings UI to its *state* dir, not the
+  # config dir: ~/.local/state/noctalia/settings.toml (layered over config.toml /
+  # built-in defaults). Symlink just that one file back into the flake repo so
+  # in-UI changes show up as unstaged diffs. noctalia's atomic writer is
+  # symlink-aware — it canonicalises the link and renames onto the real target —
+  # so the single-file out-of-store symlink survives every save.
+  #
+  # config.toml itself is read-only (built-in defaults, or declarative via
+  # programs.noctalia.settings above), so it isn't symlinked. Note: custom
+  # palettes saved in the UI land in ~/.config/noctalia/palettes/ and are NOT
+  # tracked here.
+  home.file.".local/state/noctalia/settings.toml".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.nixos-config/users/nullcopy/noctalia-settings.toml";
 
   ## ----- state version -------------------------------------------------------
   # Don't change this unless you know what you're doing
