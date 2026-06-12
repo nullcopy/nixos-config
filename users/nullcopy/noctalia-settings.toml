@@ -15,6 +15,7 @@ end = [
     "session"
 ]
 layer = "overlay"
+position = "bottom"
 reserve_space = false
 start = [ "group:g1", "workspaces" ]
 
