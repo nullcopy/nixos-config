@@ -25,9 +25,17 @@
   ## ----- network -------------------------------------------------------------
   networking.hostName = "wisp";
 
+  ## ----- system --------------------------------------------------------------
   # HP publishes G1a BIOS updates through LVFS. Check/apply with:
   #   fwupdmgr refresh && fwupdmgr get-updates && fwupdmgr update
   services.fwupd.enable = true;
+
+  # CoolerControl is a hwmon dashboard/controller that can help if the
+  # kernel/fimrware exposes fan control
+  programs.coolercontrol.enable = true;
+
+  # `sensors` for better temperature reading
+  environment.systemPackages = [ pkgs.lm_sensors ];
 
   ## ----- users ---------------------------------------------------------------
   programs.zsh.enable = true; # system-level so zsh is in /etc/shells
