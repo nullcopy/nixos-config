@@ -1,6 +1,9 @@
 { config, pkgs, ... }:
 
 let
+  # `sudo -n` (non-interactive) only works because ./system.nix carries a
+  # NOPASSWD sudoers rule scoped to this exact tailscale binary; keep the two
+  # files in sync if the package ever changes.
   tailscale = "${pkgs.tailscale}/bin/tailscale";
   sudo = "/run/wrappers/bin/sudo";
 

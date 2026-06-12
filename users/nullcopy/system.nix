@@ -23,4 +23,23 @@
       "video"
     ];
   };
+
+  # Passwordless sudo for the tailscale binary only. The login-time
+  # tailscale-up user service (./tailscale.nix) runs `sudo -n tailscale ...`;
+  # `-n` fails rather than prompts, and wheel requires a password by default,
+  # so without this rule the unit fails every login. A bare command path (no
+  # args spec) permits any arguments; everything else still prompts as usual.
+  # extraRules are emitted after the default wheel rule, and in sudoers the
+  # last matching rule wins.
+  security.sudo.extraRules = [
+    {
+      users = [ "nullcopy" ];
+      commands = [
+        {
+          command = "${pkgs.tailscale}/bin/tailscale";
+          options = [ "NOPASSWD" ];
+        }
+      ];
+    }
+  ];
 }

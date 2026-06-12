@@ -67,11 +67,30 @@
             ./modules/core.nix
             ./hosts/${hostname}/configuration.nix
             { networking.hostName = hostname; }
+            # Enforce the headless invariant mechanically: `graphical = false`
+            # skips users' desktop.nix, but the greeter import lives in the
+            # host's own configuration.nix — catch the mismatch at eval time
+            # instead of shipping a login screen on a server.
+            (
+              { config, ... }:
+              {
+                assertions = [
+                  {
+                    assertion = graphical || !config.services.greetd.enable;
+                    message = "Host ${hostname} is declared headless (graphical = false) but enables a greeter; remove the modules/greeters/* import from hosts/${hostname}/configuration.nix.";
+                  }
+                ];
+              }
+            )
             home-manager.nixosModules.home-manager
             {
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
               home-manager.extraSpecialArgs = { inherit inputs; };
+              # If home-manager wants to manage a file that already exists
+              # (e.g. a hand-written ~/.zshrc on first deploy), move it aside
+              # with this suffix instead of aborting the activation.
+              home-manager.backupFileExtension = "hm-backup";
             }
           ]
           ++ lib.concatMap (
@@ -97,12 +116,25 @@
       # toggleterm via vim.o.shell) inherit a config-less shell. Overriding
       # $SHELL and exec'ing zsh fixes both. Centralizing the hook here keeps
       # per-language files focused on language tooling.
+      #
+      # The exec is guarded: it only fires in an *interactive* bash ($- contains
+      # "i"). Non-interactive entries — `nix develop .#rust -c cargo build`,
+      # direnv's `use flake` — run the hook in a non-interactive bash, where an
+      # unconditional exec would swallow the command they came to run.
+      # IN_NIX_SHELL_EXEC prevents a nested `nix develop` from re-exec looping.
       mkDevShell =
         file:
         (import file { inherit pkgs system fenix; }).overrideAttrs (old: {
           shellHook = (old.shellHook or "") + ''
-            export SHELL=${pkgs.zsh}/bin/zsh
-            exec ${pkgs.zsh}/bin/zsh
+            case $- in
+              *i*)
+                if [ -z "''${IN_NIX_SHELL_EXEC:-}" ]; then
+                  export IN_NIX_SHELL_EXEC=1
+                  export SHELL=${pkgs.zsh}/bin/zsh
+                  exec ${pkgs.zsh}/bin/zsh
+                fi
+                ;;
+            esac
           '';
         });
     in

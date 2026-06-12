@@ -24,6 +24,16 @@
     signal-desktop
     tor-browser
     transmission_4-gtk
+
+    # Noctalia companions / screenshot stack, invoked from the niri binds in
+    # ./niri.nix (grim/slurp/satty) and by noctalia itself (wlsunset,
+    # playerctl, xdg-utils).
+    grim
+    playerctl
+    satty
+    slurp
+    wlsunset
+    xdg-utils
   ];
 
   ## ----- session variables ---------------------------------------------------

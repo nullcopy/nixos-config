@@ -16,6 +16,10 @@
     "flakes"
   ];
 
+  # Hard-link identical files in the store as they're added; saves disk at a
+  # small cost on writes to the store.
+  nix.settings.auto-optimise-store = true;
+
   # Central unfree whitelist. This must live at the system level — with
   # home-manager.useGlobalPkgs every user's packages evaluate against this
   # nixpkgs instance, so a user wanting an unfree package adds it here.

@@ -26,12 +26,14 @@
   ];
 
   ## ----- programs ------------------------------------------------------------
+  # For binaries installed imperatively with `cargo install`. Appended to
+  # PATH (sessionPath appends, not prepends), which is fine: nix-provided
+  # toolchains in devShells should win over ~/.cargo/bin anyway.
+  home.sessionPath = [ "$HOME/.cargo/bin" ];
+
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
-    initContent = ''
-      export PATH="$HOME/.cargo/bin:$PATH"
-    '';
     history = {
       path = "${config.home.homeDirectory}/.zsh_history";
       size = 100000;
