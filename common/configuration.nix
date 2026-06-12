@@ -34,6 +34,15 @@
   networking.networkmanager.enable = true;
   networking.firewall.enable = true;
 
+  # DNS broker, required for tailscale and nymvpn to coexist. Both rewrite
+  # DNS config on connect/disconnect; without resolved, nym-vpnd falls back
+  # to overwriting /etc/resolv.conf directly, which invalidates openresolv's
+  # file signature and breaks `tailscale up` afterwards ("signature mismatch:
+  # /etc/resolv.conf"). With resolved enabled, both daemons (and
+  # NetworkManager, which NixOS points at resolved automatically) set
+  # per-link DNS over D-Bus instead of fighting over the file.
+  services.resolved.enable = true;
+
   ## ----- tailscale -----------------------------------------------------------
   # Daemon must run as root; per-user up/down is configured in home-manager.
   services.tailscale.enable = true;
