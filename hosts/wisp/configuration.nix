@@ -25,6 +25,10 @@
   ## ----- network -------------------------------------------------------------
   networking.hostName = "wisp";
 
+  # HP publishes G1a BIOS updates through LVFS. Check/apply with:
+  #   fwupdmgr refresh && fwupdmgr get-updates && fwupdmgr update
+  services.fwupd.enable = true;
+
   ## ----- users ---------------------------------------------------------------
   programs.zsh.enable = true; # system-level so zsh is in /etc/shells
 
