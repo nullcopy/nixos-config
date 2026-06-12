@@ -1,5 +1,19 @@
 [bar.default]
 auto_hide = true
+end = [
+    "media",
+    "wallpaper",
+    "tray",
+    "notifications",
+    "clipboard",
+    "network",
+    "bluetooth",
+    "volume",
+    "brightness",
+    "battery",
+    "control-center",
+    "session"
+]
 layer = "overlay"
 reserve_space = false
 start = [ "group:g1", "workspaces" ]
@@ -71,11 +85,30 @@ offline_mode = true
     transparency_mode = "soft"
 
 [theme]
-builtin = "Catppuccin"
+builtin = "Kanagawa"
+mode = "dark"
 
     [theme.templates]
     enable_builtin_templates = false
     enable_community_templates = false
+
+[wallpaper]
+directory = "/home/nullcopy/Pictures/Wallpapers"
+
+    [wallpaper.default]
+    path = "/home/nullcopy/Pictures/Wallpapers/liquidmetal.jpg"
+
+    [wallpaper.last]
+    path = "/home/nullcopy/Pictures/Wallpapers/liquidmetal.jpg"
+
+    [wallpaper.monitors.HDMI-A-1]
+    path = "/home/nullcopy/Pictures/Wallpapers/liquidmetal.jpg"
+
+    [[wallpaper.favorite]]
+    builtin_palette = "Kanagawa"
+    palette_source = "builtin"
+    path = "/home/nullcopy/Pictures/Wallpapers/liquidmetal.jpg"
+    theme_mode = "dark"
 
 [weather]
 enabled = false
