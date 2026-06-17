@@ -28,6 +28,7 @@
     tldr
     tor-browser
     ripgrep
+    rage
   ];
 
   ## ----- session variables ---------------------------------------------------
