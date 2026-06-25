@@ -23,12 +23,12 @@
     fzf
     grayjay
     nautilus
-    transmission_4-gtk
     signal-desktop
     tldr
     tor-browser
     ripgrep
     rage
+    qbittorrent
   ];
 
   ## ----- session variables ---------------------------------------------------
