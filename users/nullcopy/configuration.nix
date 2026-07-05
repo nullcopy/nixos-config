@@ -21,7 +21,6 @@
     brave
     nerd-fonts.jetbrains-mono
     fzf
-    grayjay
     nautilus
     signal-desktop
     tldr
