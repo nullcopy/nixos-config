@@ -67,6 +67,7 @@
         rust = mkDevShell ./devShells/rust.nix;
         python = mkDevShell ./devShells/python.nix;
         go = mkDevShell ./devShells/go.nix;
+        forgebox = mkDevShell ./devShells/forgebox.nix;
         c = mkDevShell ./devShells/c.nix;
         lua = mkDevShell ./devShells/lua.nix;
         nix = mkDevShell ./devShells/nix.nix;
