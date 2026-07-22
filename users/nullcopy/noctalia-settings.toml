@@ -1,3 +1,5 @@
+config_version = 2
+
 [bar.default]
 auto_hide = true
 end = [
